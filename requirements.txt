@@ -1,0 +1,6 @@
+slixmpp
+feedparser
+beautifulsoup4
+markdownify
+lxml
+python-dotenv
