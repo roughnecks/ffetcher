@@ -43,22 +43,22 @@ class FeedBot(slixmpp.ClientXMPP):
 
     async def feed_loop(self):
         while True:
-            try:
-                await self.check_feeds()
-            except Exception as e:
-                # Log the error but keep the loop alive. A single failed
-                # feed download (e.g. IncompleteRead, timeout) should not
-                # stop the bot from checking the remaining feeds.
-                logging.error("Error during feed check: %s", e)
+            await self.check_feeds()
             await asyncio.sleep(self.interval)
 
     async def check_feeds(self):
         for muc, feed_urls in self.feeds_config.items():
             for feed_url in feed_urls:
-                articles = get_new_articles(
-                    feed_url, muc, self.summary_max_length,
-                    self.badwords, self.user_agent
-                )
+                try:
+                    articles = get_new_articles(
+                        feed_url, muc, self.summary_max_length,
+                        self.badwords, self.user_agent
+                    )
+                except Exception as e:
+                    # Log the error with the feed URL and keep going.
+                    # A single failed feed should not stop the remaining ones.
+                    logging.error("Error fetching feed %s: %s", feed_url, e)
+                    continue
                 for article in articles:
                     self.send_message(
                         mto=muc,
