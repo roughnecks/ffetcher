@@ -4,6 +4,9 @@ An XMPP bot that monitors RSS and Atom feeds and posts new articles to one or mo
 
 ---
 
+<img src="./ffetcher.webp" width="400">
+
+
 ## Features
 
 ffetcher monitors a list of RSS and Atom feeds and delivers new articles to XMPP group chats. Each room has its own independent list of feeds, so different communities can follow different sources without overlap.
