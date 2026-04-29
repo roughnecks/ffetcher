@@ -3,7 +3,7 @@ import logging
 import re
 
 import feedparser
-from bs4 import BeautifulSoup
+from bs4 import BeautifulSoup, NavigableString
 from markdownify import markdownify
 
 from db import is_new_entry, is_known_feed
@@ -118,64 +118,50 @@ def _contains_badword(text, link, badwords):
     return False
 
 
-def _starts_with_emoji(line):
+def _fix_mastodon_links(soup):
     """
-    Return True if the line starts with a Unicode emoji character.
+    Fix Mastodon's habit of splitting URLs and hashtags across multiple
+    <span> tags inside <a> elements. We do this directly in the DOM so
+    that the structure is clean before markdownify processes it.
+
+    - Hashtag links (/tags/ in href) and mentions are replaced with their
+      visible text (e.g. #IRC, @user).
+    - All other links are replaced with their full href, reconstructed by
+      joining the text of all child spans without separators.
+    - Custom emoji <img> tags are replaced with their alt text.
     """
-    if not line:
-        return False
-    # Emoji occupy code points above U+00FF outside the basic Latin range.
-    return ord(line[0]) > 0x00FF
-
-
-def _is_url_fragment(line):
-    """
-    Return True if the line looks like the continuation of a broken URL:
-    no spaces, no URL scheme, not a hashtag or standalone word.
-    """
-    if " " in line:
-        return False
-    # If it starts with any valid URI scheme, it is a full URL, not a fragment.
-    if re.match(r"^[a-zA-Z][a-zA-Z0-9+\-.]*://", line):
-        return False
-    if line.startswith("#"):
-        return False
-    # Looks like a path fragment (letters, digits, slashes, dots, hyphens...)
-    return bool(re.match(r"^[A-Za-z0-9\-._~:/?#\[\]@!$&'()*+,;=%]+$", line))
-
-
-def _clean_text(raw):
-    """
-    Convert HTML to Markdown using markdownify, then clean up the result.
-
-    markdownify handles structural tags (headings, lists, code blocks,
-    bold, italic) natively and produces readable Markdown. We then handle
-    Mastodon-specific quirks on top of it: hashtag links are replaced with
-    their visible text, and other links use their href.
-    """
-    unescaped = html.unescape(raw)
-    soup = BeautifulSoup(unescaped, "lxml")
-
-    # Replace <a> tags selectively before converting to Markdown:
-    # - hashtag links (href contains /tags/) are replaced with their visible text
-    # - mention links (class contains "mention") are replaced with their visible text
-    # - all other links are replaced with their href to get the full URL
     for a in soup.find_all("a", href=True):
         href = a["href"]
         classes = a.get("class", [])
         if "/tags/" in href or "mention" in classes:
+            # Show visible text (e.g. #hashtag or @mention).
             a.replace_with(a.get_text(separator=""))
         else:
+            # Use the href directly — it is always the complete URL,
+            # regardless of how Mastodon visually truncates the anchor text.
             a.replace_with(href)
 
-    # Replace custom emoji <img> tags with their alt text.
-    # Mastodon emoji have an alt attribute with the emoji shortcode.
     for img in soup.find_all("img", alt=True):
         img.replace_with(img["alt"])
 
+
+def _clean_text(raw):
+    """
+    Convert HTML to Markdown using markdownify, preserving the author's
+    intended paragraph structure. Mastodon-specific link and emoji quirks
+    are fixed in the DOM before conversion.
+    """
+    unescaped = html.unescape(raw)
+    soup = BeautifulSoup(unescaped, "lxml")
+
+    # Fix Mastodon-specific markup before converting to Markdown.
+    _fix_mastodon_links(soup)
+
     # Convert the cleaned HTML to Markdown.
-    # Disable escaping of * and _ so that plain text containing these
-    # characters is not cluttered with backslashes in the chat output.
+    # heading_style="ATX" uses # for headings.
+    # strip=["img"] removes any remaining image tags (no alt text).
+    # Disable escaping of * and _ to avoid cluttering chat output
+    # with backslashes on plain text that happens to contain these characters.
     text = markdownify(
         str(soup),
         heading_style="ATX",
@@ -187,33 +173,8 @@ def _clean_text(raw):
     # Collapse runs of more than two consecutive blank lines.
     text = re.sub(r"\n{3,}", "\n\n", text)
 
-    # Collapse multiple spaces within each line, drop blank lines.
-    lines = [" ".join(line.split()) for line in text.splitlines()]
-    lines = [line for line in lines if line]
-
-    # Rejoin lines that belong to the same logical sentence but were split
-    # by HTML tag boundaries. A line is rejoined to the previous one if:
-    # - it is a fragment of a broken URL (no spaces, no scheme)
-    # - it is a standalone URL (starts with any URI scheme)
-    # - it starts with an emoji
-    # - it starts with a hashtag
-    # - the previous line ends with a hashtag (the text continues after it)
-    joined = []
-    for line in lines:
-        if joined and (
-            _is_url_fragment(line)
-            or re.match(r"^[a-zA-Z][a-zA-Z0-9+\-.]*://", line)
-            or _starts_with_emoji(line)
-            or line.startswith("#")
-            or re.search(r"#\S+$", joined[-1])
-        ):
-            joined[-1] = joined[-1] + " " + line
-        else:
-            joined.append(line)
-
-    text = "\n".join(joined)
-
-    # Remove whitespace that sometimes appears between '#' and the tag word.
+    # Remove whitespace that sometimes appears between '#' and the tag word,
+    # caused by Mastodon wrapping the symbol and word in separate spans.
     text = re.sub(r"#\s+(\S)", r"#\1", text)
 
     return text.strip()
