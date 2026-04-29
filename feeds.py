@@ -135,22 +135,13 @@ def _is_url_fragment(line):
     """
     if " " in line:
         return False
+    # If it starts with any valid URI scheme, it is a full URL, not a fragment.
     if re.match(r"^[a-zA-Z][a-zA-Z0-9+\-.]*://", line):
         return False
     if line.startswith("#"):
         return False
     # Looks like a path fragment (letters, digits, slashes, dots, hyphens...)
-    return bool(re.match(r"^[A-Za-z0-9\-._~:/?#\[\]@!def _is_url_fragment(line):
-    """
-    Return True if the line looks like the continuation of a broken URL:
-    no spaces, no URL scheme, not a hashtag or standalone word.
-    """
-    if " " in line:
-        return False
-    if line.startswith(("http://", "https://", "#")):
-        return False
-    # Looks like a path fragment (letters, digits, slashes, dots, hyphens...)
-    return bool(re.match(r"^[A-Za-z0-9\-._~:/?#\[\]@!$&\'()*+,;=%]+$", line))\'()*+,;=%]+$", line))
+    return bool(re.match(r"^[A-Za-z0-9\-._~:/?#\[\]@!$&'()*+,;=%]+$", line))
 
 
 def _clean_text(raw):
@@ -178,7 +169,7 @@ def _clean_text(raw):
             a.replace_with(href)
 
     # Replace custom emoji <img> tags with their alt text.
-    # Mastodon emoji have a "emojione" class and a descriptive alt attribute.
+    # Mastodon emoji have an alt attribute with the emoji shortcode.
     for img in soup.find_all("img", alt=True):
         img.replace_with(img["alt"])
 
@@ -193,8 +184,34 @@ def _clean_text(raw):
         escape_underscores=False,
     )
 
-    # Remove any residual blank lines beyond a single separator.
+    # Collapse runs of more than two consecutive blank lines.
     text = re.sub(r"\n{3,}", "\n\n", text)
+
+    # Collapse multiple spaces within each line, drop blank lines.
+    lines = [" ".join(line.split()) for line in text.splitlines()]
+    lines = [line for line in lines if line]
+
+    # Rejoin lines that belong to the same logical sentence but were split
+    # by HTML tag boundaries. A line is rejoined to the previous one if:
+    # - it is a fragment of a broken URL (no spaces, no scheme)
+    # - it is a standalone URL (starts with any URI scheme)
+    # - it starts with an emoji
+    # - it starts with a hashtag
+    # - the previous line ends with a hashtag (the text continues after it)
+    joined = []
+    for line in lines:
+        if joined and (
+            _is_url_fragment(line)
+            or re.match(r"^[a-zA-Z][a-zA-Z0-9+\-.]*://", line)
+            or _starts_with_emoji(line)
+            or line.startswith("#")
+            or re.search(r"#\S+$", joined[-1])
+        ):
+            joined[-1] = joined[-1] + " " + line
+        else:
+            joined.append(line)
+
+    text = "\n".join(joined)
 
     # Remove whitespace that sometimes appears between '#' and the tag word.
     text = re.sub(r"#\s+(\S)", r"#\1", text)
