@@ -135,10 +135,22 @@ def _is_url_fragment(line):
     """
     if " " in line:
         return False
+    if re.match(r"^[a-zA-Z][a-zA-Z0-9+\-.]*://", line):
+        return False
+    if line.startswith("#"):
+        return False
+    # Looks like a path fragment (letters, digits, slashes, dots, hyphens...)
+    return bool(re.match(r"^[A-Za-z0-9\-._~:/?#\[\]@!def _is_url_fragment(line):
+    """
+    Return True if the line looks like the continuation of a broken URL:
+    no spaces, no URL scheme, not a hashtag or standalone word.
+    """
+    if " " in line:
+        return False
     if line.startswith(("http://", "https://", "#")):
         return False
     # Looks like a path fragment (letters, digits, slashes, dots, hyphens...)
-    return bool(re.match(r"^[A-Za-z0-9\-._~:/?#\[\]@!$&\'()*+,;=%]+$", line))
+    return bool(re.match(r"^[A-Za-z0-9\-._~:/?#\[\]@!$&\'()*+,;=%]+$", line))\'()*+,;=%]+$", line))
 
 
 def _clean_text(raw):
