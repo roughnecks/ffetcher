@@ -8,11 +8,14 @@ from markdownify import markdownify
 
 from db import is_new_entry, is_known_feed
 
+# Image extensions considered valid for inline preview.
+IMAGE_EXTENSIONS = (".jpg", ".jpeg", ".png", ".gif", ".webp", ".avif", ".svg")
+
 
 def get_new_articles(feed_url, muc, summary_max_length=300, badwords=None, user_agent=None):
     """
     Parse a feed and return a list of new articles for the given MUC.
-    Each article is a dict with keys: title, summary, link.
+    Each article is a dict with keys: title, summary, link, images.
     Articles are returned in chronological order (oldest first).
 
     On the very first run for a (feed_url, muc) pair, all existing articles
@@ -60,6 +63,7 @@ def get_new_articles(feed_url, muc, summary_max_length=300, badwords=None, user_
 
         title   = _clean_text(getattr(entry, "title", "(no title)"))
         summary = _extract_summary(entry, summary_max_length)
+        images  = _extract_images(entry)
 
         # Drop articles containing a badword in body or link.
         if _contains_badword(title + " " + summary, link, badwords):
@@ -70,6 +74,7 @@ def get_new_articles(feed_url, muc, summary_max_length=300, badwords=None, user_
             "title":   title,
             "summary": summary,
             "link":    link,
+            "images":  images,
         })
 
     return new_articles
@@ -97,6 +102,55 @@ def _extract_summary(entry, summary_max_length):
         text = text[:summary_max_length].rsplit(" ", 1)[0] + " ..."
 
     return text
+
+
+def _extract_images(entry):
+    """
+    Extract image URLs from a feed entry.
+    Looks in three places:
+    - entry.enclosures (standard RSS attachments)
+    - entry.media_content (Media RSS, used by Mastodon and others)
+    - img tags inside the entry content or summary HTML
+    Returns a deduplicated list of image URL strings.
+    """
+    images = []
+    seen = set()
+
+    def _add(url):
+        if url and url not in seen:
+            # Only include URLs that look like images.
+            url_lower = url.lower().split("?")[0]
+            if url_lower.endswith(IMAGE_EXTENSIONS):
+                seen.add(url)
+                images.append(url)
+
+    # RSS enclosures.
+    for enc in getattr(entry, "enclosures", []):
+        mime = enc.get("type", "")
+        if mime.startswith("image/"):
+            _add(enc.get("url", ""))
+
+    # Media RSS (Mastodon, YouTube, etc.).
+    for media in getattr(entry, "media_content", []):
+        mime = media.get("type", "")
+        if mime.startswith("image/") or media.get("url", "").lower().split("?")[0].endswith(IMAGE_EXTENSIONS):
+            _add(media.get("url", ""))
+
+    # Inline <img> tags in the HTML content.
+    raw = ""
+    if hasattr(entry, "content") and entry.content:
+        raw = entry.content[0].value
+    elif hasattr(entry, "summary") and entry.summary:
+        raw = entry.summary
+
+    if raw:
+        soup = BeautifulSoup(html.unescape(raw), "lxml")
+        for img in soup.find_all("img", src=True):
+            mime = img.get("type", "")
+            if not mime or mime.startswith("image/"):
+                _add(img["src"])
+
+    return images
 
 
 def _contains_badword(text, link, badwords):
