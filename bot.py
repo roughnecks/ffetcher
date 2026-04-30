@@ -59,14 +59,26 @@ class FeedBot(slixmpp.ClientXMPP):
                     # A single failed feed should not stop the remaining ones.
                     logging.error("Error fetching feed %s: %s", feed_url, e)
                     continue
+
                 for article in articles:
+                    # Send the main message with title, summary and link.
                     self.send_message(
                         mto=muc,
                         mbody=self.format_message(article),
                         mtype="groupchat",
                     )
-                    # Small delay between messages to avoid flooding.
                     await asyncio.sleep(1)
+
+                    # Send each image URL as a separate message so that
+                    # clients with inline preview can display it directly.
+                    for image_url in article["images"]:
+                        self.send_message(
+                            mto=muc,
+                            mbody=image_url,
+                            mtype="groupchat",
+                        )
+                        await asyncio.sleep(1)
+
                 # Delay between feed downloads to avoid hammering servers.
                 await asyncio.sleep(30)
 
@@ -111,9 +123,9 @@ if __name__ == "__main__":
     password   = os.getenv("BOT_PASSWORD")
     nick       = os.getenv("BOT_NICK")
     db_path    = os.getenv("BOT_DB_PATH", "./feeds.db")
-    interval   = int(os.getenv("BOT_INTERVAL", "300"))
+    interval   = int(os.getenv("BOT_INTERVAL", "600"))
     feeds_file = os.getenv("BOT_FEEDS_FILE", "./feeds.ini")
-    summary_max_length = int(os.getenv("BOT_SUMMARY_MAX_LENGTH", "300"))
+    summary_max_length = int(os.getenv("BOT_SUMMARY_MAX_LENGTH", "600"))
     quote_summary = os.getenv("BOT_QUOTE_SUMMARY", "false").lower() == "true"
     user_agent = os.getenv("BOT_USER_AGENT", "ffetcher/1.0 +https://example.com")
 
