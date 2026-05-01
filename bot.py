@@ -11,6 +11,9 @@ from db import init_db
 from feeds import get_new_articles
 from config import load_feeds
 
+# How often to ping each MUC to verify we are still joined (seconds).
+MUC_PING_INTERVAL = 60
+
 
 class FeedBot(slixmpp.ClientXMPP):
 
@@ -37,14 +40,42 @@ class FeedBot(slixmpp.ClientXMPP):
             self.plugin["xep_0045"].join_muc(muc, self.nick)
             logging.info("Joined MUC: %s", muc)
 
-        # Wait a moment before starting the feed loop, to let MUC joins settle.
+        # Wait a moment before starting loops, to let MUC joins settle.
         await asyncio.sleep(5)
         asyncio.ensure_future(self.feed_loop())
+        asyncio.ensure_future(self.muc_ping_loop())
 
     async def feed_loop(self):
         while True:
             await self.check_feeds()
             await asyncio.sleep(self.interval)
+
+    async def muc_ping_loop(self):
+        """
+        Periodically ping each MUC to verify we are still joined.
+        If a ping fails, attempt to rejoin the room.
+        """
+        while True:
+            await asyncio.sleep(MUC_PING_INTERVAL)
+            for muc in self.feeds_config:
+                await self._ping_muc(muc)
+
+    async def _ping_muc(self, muc):
+        """
+        Send a XEP-0199 ping to our own participant in the MUC.
+        If the ping times out or returns an error, attempt to rejoin.
+        """
+        target = "%s/%s" % (muc, self.nick)
+        try:
+            await self.plugin["xep_0199"].ping(target, timeout=10)
+            logging.debug("MUC ping OK: %s", muc)
+        except Exception as e:
+            logging.warning("MUC ping failed for %s (%s), attempting rejoin...", muc, e)
+            try:
+                self.plugin["xep_0045"].join_muc(muc, self.nick)
+                logging.info("Rejoined MUC: %s", muc)
+            except Exception as rejoin_err:
+                logging.error("Failed to rejoin MUC %s: %s", muc, rejoin_err)
 
     async def check_feeds(self):
         for muc, feed_urls in self.feeds_config.items():
