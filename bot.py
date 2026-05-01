@@ -18,7 +18,8 @@ MUC_PING_INTERVAL = 60
 class FeedBot(slixmpp.ClientXMPP):
 
     def __init__(self, jid, password, nick, feeds_config, interval,
-                 summary_max_length, badwords, quote_summary, user_agent):
+                 summary_max_length, badwords, quote_summary, user_agent,
+                 show_images):
         slixmpp.ClientXMPP.__init__(self, jid, password)
 
         self.nick = nick
@@ -28,6 +29,7 @@ class FeedBot(slixmpp.ClientXMPP):
         self.badwords = badwords
         self.quote_summary = quote_summary
         self.user_agent = user_agent
+        self.show_images = show_images
 
         self.add_event_handler("session_start", self.on_start)
         self.add_event_handler("disconnected", self.on_disconnect)
@@ -102,13 +104,14 @@ class FeedBot(slixmpp.ClientXMPP):
 
                     # Send each image URL as a separate message so that
                     # clients with inline preview can display it directly.
-                    for image_url in article["images"]:
-                        self.send_message(
-                            mto=muc,
-                            mbody=image_url,
-                            mtype="groupchat",
-                        )
-                        await asyncio.sleep(1)
+                    if self.show_images:
+                        for image_url in article["images"]:
+                            self.send_message(
+                                mto=muc,
+                                mbody=image_url,
+                                mtype="groupchat",
+                            )
+                            await asyncio.sleep(1)
 
                 # Delay between feed downloads to avoid hammering servers.
                 await asyncio.sleep(30)
@@ -158,6 +161,7 @@ if __name__ == "__main__":
     feeds_file = os.getenv("BOT_FEEDS_FILE", "./feeds.ini")
     summary_max_length = int(os.getenv("BOT_SUMMARY_MAX_LENGTH", "600"))
     quote_summary = os.getenv("BOT_QUOTE_SUMMARY", "false").lower() == "true"
+    show_images = os.getenv("BOT_SHOW_IMAGES", "false").lower() == "true"
     user_agent = os.getenv("BOT_USER_AGENT", "ffetcher/1.0 +https://example.com")
 
     if not all([jid, password, nick]):
@@ -170,7 +174,8 @@ if __name__ == "__main__":
         raise SystemExit("No feeds configured. Check %s" % feeds_file)
 
     bot = FeedBot(jid, password, nick, feeds_config, interval,
-                  summary_max_length, badwords, quote_summary, user_agent)
+                  summary_max_length, badwords, quote_summary, user_agent,
+                  show_images)
     bot.register_plugin("xep_0030")  # Service Discovery
     bot.register_plugin("xep_0045")  # Multi-User Chat
     bot.register_plugin("xep_0199")  # XMPP Ping
