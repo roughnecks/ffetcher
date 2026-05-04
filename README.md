@@ -35,7 +35,7 @@ ffetcher is careful not to hammer feed servers: there is a configurable delay be
 ## Installation
 
 ```sh
-tar xzf ffetcher-main.tar.gz
+git clone https://code.woodpeckersnest.space/roughnecks/ffetcher.git
 cd ffetcher
 python3 -m venv venv
 source venv/bin/activate
