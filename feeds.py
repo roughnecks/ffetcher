@@ -3,7 +3,8 @@ import logging
 import re
 
 import feedparser
-from bs4 import BeautifulSoup, NavigableString
+from bs4 import BeautifulSoup
+from langdetect import detect, LangDetectException
 from markdownify import markdownify
 
 from db import is_new_entry, is_known_feed
@@ -12,7 +13,8 @@ from db import is_new_entry, is_known_feed
 IMAGE_EXTENSIONS = (".jpg", ".jpeg", ".png", ".gif", ".webp", ".avif", ".svg")
 
 
-def get_new_articles(feed_url, muc, summary_max_length=300, badwords=None, user_agent=None):
+def get_new_articles(feed_url, muc, summary_max_length=300, badwords=None,
+                     user_agent=None, languages=None):
     """
     Parse a feed and return a list of new articles for the given MUC.
     Each article is a dict with keys: title, summary, link, images.
@@ -21,9 +23,13 @@ def get_new_articles(feed_url, muc, summary_max_length=300, badwords=None, user_
     On the very first run for a (feed_url, muc) pair, all existing articles
     are recorded in the database but not returned, to avoid flooding the MUC.
     Articles whose body or link contain a badword are silently dropped.
+    If a languages list is provided, articles not matching any of the allowed
+    languages are silently dropped.
     """
     if badwords is None:
         badwords = []
+    if languages is None:
+        languages = []
 
     # Pass a custom User-Agent to feedparser so servers can identify the
     # client and are less likely to block it as an anonymous scraper.
@@ -68,6 +74,11 @@ def get_new_articles(feed_url, muc, summary_max_length=300, badwords=None, user_
         # Drop articles containing a badword in body or link.
         if _contains_badword(title + " " + summary, link, badwords):
             logging.debug("Filtered by badword: %s", link)
+            continue
+
+        # Drop articles whose detected language is not in the allowed list.
+        if languages and not _is_allowed_language(title + " " + summary, languages):
+            logging.debug("Filtered by language: %s", link)
             continue
 
         new_articles.append({
@@ -118,7 +129,6 @@ def _extract_images(entry):
 
     def _add(url):
         if url and url not in seen:
-            # Only include URLs that look like images.
             url_lower = url.lower().split("?")[0]
             if url_lower.endswith(IMAGE_EXTENSIONS):
                 seen.add(url)
@@ -153,6 +163,24 @@ def _extract_images(entry):
     return images
 
 
+def _is_allowed_language(text, languages):
+    """
+    Return True if the detected language of the text is in the allowed list.
+    If detection fails (text too short or ambiguous), the article is allowed
+    through to avoid dropping legitimate content.
+    """
+    if not text.strip():
+        return True
+    try:
+        detected = detect(text)
+        logging.debug("Detected language: %s", detected)
+        return detected in languages
+    except LangDetectException:
+        # Detection failed, allow the article through.
+        logging.debug("Language detection failed, allowing article through")
+        return True
+
+
 def _contains_badword(text, link, badwords):
     """
     Return True if any badword is found in the text or in the link.
@@ -180,19 +208,15 @@ def _fix_mastodon_links(soup):
 
     - Hashtag links (/tags/ in href) and mentions are replaced with their
       visible text (e.g. #IRC, @user).
-    - All other links are replaced with their full href, reconstructed by
-      joining the text of all child spans without separators.
+    - All other links are replaced with their full href.
     - Custom emoji <img> tags are replaced with their alt text.
     """
     for a in soup.find_all("a", href=True):
         href = a["href"]
         classes = a.get("class", [])
         if "/tags/" in href or "mention" in classes:
-            # Show visible text (e.g. #hashtag or @mention).
             a.replace_with(a.get_text(separator=""))
         else:
-            # Use the href directly — it is always the complete URL,
-            # regardless of how Mastodon visually truncates the anchor text.
             a.replace_with(href)
 
     for img in soup.find_all("img", alt=True):
@@ -208,14 +232,13 @@ def _clean_text(raw):
     unescaped = html.unescape(raw)
     soup = BeautifulSoup(unescaped, "lxml")
 
-    # Fix Mastodon-specific markup before converting to Markdown.
     _fix_mastodon_links(soup)
 
     # Convert the cleaned HTML to Markdown.
     # heading_style="ATX" uses # for headings.
-    # strip=["img"] removes any remaining image tags (no alt text).
+    # strip=["img"] removes any remaining image tags without alt text.
     # Disable escaping of * and _ to avoid cluttering chat output
-    # with backslashes on plain text that happens to contain these characters.
+    # with backslashes on plain text containing these characters.
     text = markdownify(
         str(soup),
         heading_style="ATX",

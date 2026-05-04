@@ -4,15 +4,24 @@ import logging
 # Section name reserved for badwords in feeds.ini.
 BADWORDS_SECTION = "badwords"
 
+# Section name reserved for allowed languages in feeds.ini.
+LANGUAGES_SECTION = "languages"
+
 
 def load_feeds(feeds_file):
     """
-    Load feeds and badwords from an INI file.
+    Load feeds, badwords and allowed languages from an INI file.
 
-    Each section name is a MUC JID, except for the reserved [badwords] section.
-    Each key in a MUC section is an arbitrary label; its value is a feed URL.
+    Each section name is a MUC JID, except for the reserved [badwords] and
+    [languages] sections. Each key in a MUC section is an arbitrary label;
+    its value is a feed URL.
+
     The [badwords] section contains strings that, if found in an article's
     body or link, cause the article to be silently dropped.
+
+    The [languages] section contains ISO 639-1 language codes (e.g. en, it,
+    de) that are accepted. If the section is absent or empty, all languages
+    are accepted.
 
     Example:
         [room@conference.example.com]
@@ -20,9 +29,12 @@ def load_feeds(feeds_file):
 
         [badwords]
         word1 = casino
-        word2 = giveaway
 
-    Returns a tuple: ({muc_jid: [feed_url, ...]}, [badword, ...])
+        [languages]
+        lang1 = en
+        lang2 = it
+
+    Returns a tuple: ({muc_jid: [feed_url, ...]}, [badword, ...], [lang, ...])
     """
     parser = configparser.ConfigParser()
 
@@ -31,17 +43,22 @@ def load_feeds(feeds_file):
             parser.read_file(f)
     except FileNotFoundError:
         logging.error("Feeds file not found: %s", feeds_file)
-        return {}, []
+        return {}, [], []
     except configparser.Error as e:
         logging.error("Error parsing feeds file: %s", e)
-        return {}, []
+        return {}, [], []
 
     feeds_config = {}
     badwords = []
+    languages = []
 
     for section in parser.sections():
         if section.strip() == BADWORDS_SECTION:
             badwords = [v.strip() for _, v in parser.items(section) if v.strip()]
+            continue
+
+        if section.strip() == LANGUAGES_SECTION:
+            languages = [v.strip().lower() for _, v in parser.items(section) if v.strip()]
             continue
 
         muc = section.strip()
@@ -51,6 +68,8 @@ def load_feeds(feeds_file):
         else:
             logging.warning("MUC section [%s] has no feed URLs, skipping.", muc)
 
-    logging.info("Loaded %d MUC(s) and %d badword(s) from %s",
-                 len(feeds_config), len(badwords), feeds_file)
-    return feeds_config, badwords
+    logging.info(
+        "Loaded %d MUC(s), %d badword(s), %d language filter(s) from %s",
+        len(feeds_config), len(badwords), len(languages), feeds_file
+    )
+    return feeds_config, badwords, languages
