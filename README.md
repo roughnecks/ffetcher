@@ -18,6 +18,8 @@ Articles are posted with a plain-text excerpt alongside the link. The excerpt le
 
 A word filter allows specific terms to be silently blocked. If any of the configured words appears in an article's body or its link, the article is dropped without being posted. This makes it easy to mute specific accounts, topics or domains across all feeds at once.
 
+A language filter allows only articles written in the configured languages to be posted. Language detection is automatic and based on the article text.
+
 ffetcher is careful not to hammer feed servers: there is a configurable delay between consecutive feed downloads, and a custom User-Agent string identifies the bot to server administrators.
 
 ---
@@ -44,7 +46,14 @@ pip install -r requirements.txt
 
 ## Configuration
 
-ffetcher uses two configuration files: `.env` for credentials and bot settings, and `feeds.ini` for the feed list.
+ffetcher uses two configuration files: `.env` for credentials and bot settings, and `feeds.ini` for the feed list. Both are created by copying the provided examples.
+
+```sh
+cp .env.example .env
+cp feeds.ini.example feeds.ini
+```
+
+Edit both files before starting the bot.
 
 ### .env
 
@@ -58,6 +67,7 @@ ffetcher uses two configuration files: `.env` for credentials and bot settings, 
 | `BOT_INTERVAL` | Feed check interval in seconds | `600` |
 | `BOT_SUMMARY_MAX_LENGTH` | Maximum length of article excerpts in characters | `600` |
 | `BOT_QUOTE_SUMMARY` | Format the article excerpt as a block quote (XEP-0393). Set to `true` only if your XMPP client supports XEP-0393, otherwise the `>` characters will appear as literal text | `false` |
+| `BOT_SHOW_IMAGES` | Send image attachments found in articles as separate messages, for clients that support inline preview | `false` |
 | `BOT_USER_AGENT` | User-Agent string sent when downloading feeds. Include a contact URL so server administrators can reach you | `ffetcher/1.0 +https://example.com` |
 | `BOT_LOG_LEVEL` | Log level: DEBUG, INFO, WARNING, ERROR | `INFO` |
 | `BOT_LOG_FILE` | Path to the log file | `./bot.log` |
@@ -65,14 +75,15 @@ ffetcher uses two configuration files: `.env` for credentials and bot settings, 
 Example:
 
 ```ini
-BOT_JID=feedbot@example.com
+BOT_JID=ffetcher@example.com
 BOT_PASSWORD=changeme
-BOT_NICK=feedbot
+BOT_NICK=ffetcher
 BOT_DB_PATH=./feeds.db
 BOT_FEEDS_FILE=./feeds.ini
 BOT_INTERVAL=600
 BOT_SUMMARY_MAX_LENGTH=600
 BOT_QUOTE_SUMMARY=false
+BOT_SHOW_IMAGES=false
 BOT_USER_AGENT=ffetcher/1.0 +https://example.com
 BOT_LOG_LEVEL=INFO
 BOT_LOG_FILE=./bot.log
@@ -83,6 +94,8 @@ BOT_LOG_FILE=./bot.log
 Each section name is a MUC JID. Each key is an arbitrary label and its value is a feed URL. A MUC can have any number of feeds.
 
 The optional `[badwords]` section contains words that, if found in an article's body or link, cause the article to be silently dropped. Matching is case-insensitive and whole-word only for body text, and substring-based for links, so `@account` will match any link containing that string.
+
+The optional `[languages]` section contains ISO 639-1 language codes (e.g. `en`, `it`, `de`) for the languages you want to receive. If this section is absent or empty, all languages are accepted and no filtering takes place.
 
 ```ini
 [room-one@conference.example.com]
@@ -96,9 +109,12 @@ feed1 = https://other.example.com/atom.xml
 word1 = casino
 word2 = sponsor
 word3 = @someaccount
+
+[languages]
+lang1 = en
 ```
 
-Changes to `feeds.ini` take effect after restarting the bot. New feeds or MUCs added later are automatically seeded without flooding on their first run.
+Changes to `feeds.ini` take effect after restarting the bot. New feeds or MUCs added later are automatically seeded without flooding on their first run. Feeds removed from `feeds.ini` are cleaned up from the database on the next restart, so re-adding them later will correctly trigger a fresh seed.
 
 ---
 
