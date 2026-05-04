@@ -7,7 +7,7 @@ import os
 import slixmpp
 from dotenv import load_dotenv
 
-from db import init_db
+from db import init_db, cleanup_feeds
 from feeds import get_new_articles
 from config import load_feeds
 
@@ -170,6 +170,11 @@ if __name__ == "__main__":
     feeds_config, badwords, languages = load_feeds(feeds_file)
     if not feeds_config:
         raise SystemExit("No feeds configured. Check %s" % feeds_file)
+
+    # Remove stale feed records from the database. This ensures that feeds
+    # removed from feeds.ini and later re-added are treated as new, preventing
+    # articles from being posted as if the feed had never been seen.
+    cleanup_feeds(feeds_config)
 
     bot = FeedBot(jid, password, nick, feeds_config, interval,
                   summary_max_length, badwords, languages, quote_summary,
