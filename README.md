@@ -37,8 +37,8 @@ ffetcher is careful not to hammer feed servers: there is a configurable delay be
 ```sh
 git clone https://code.woodpeckersnest.space/roughnecks/ffetcher.git
 cd ffetcher
-python3 -m venv venv
-source venv/bin/activate
+python3 -m venv .venv
+source .venv/bin/activate
 pip install -r requirements.txt
 ```
 
@@ -121,7 +121,7 @@ Changes to `feeds.ini` take effect after restarting the bot. New feeds or MUCs a
 ## Running
 
 ```sh
-source venv/bin/activate
+source .venv/bin/activate
 python3 bot.py
 ```
 
@@ -140,7 +140,7 @@ After=network.target
 Type=simple
 User=youruser
 WorkingDirectory=/path/to/ffetcher
-ExecStart=/path/to/ffetcher/venv/bin/python3 bot.py
+ExecStart=/path/to/ffetcher/.venv/bin/python3 bot.py
 Restart=on-failure
 
 [Install]
