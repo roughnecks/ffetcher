@@ -45,6 +45,31 @@ def init_db(db_path):
         conn.close()
 
 
+def cleanup_feeds(feeds_config):
+    """
+    Remove from known_feeds any (feed_url, muc) pair that is no longer
+    present in the current feeds configuration. This prevents stale records
+    from causing articles to be posted when a feed is removed and re-added.
+    """
+    conn = sqlite3.connect(_db_path)
+    try:
+        rows = conn.execute("SELECT feed_url, muc FROM known_feeds").fetchall()
+        removed = 0
+        for feed_url, muc in rows:
+            if muc not in feeds_config or feed_url not in feeds_config[muc]:
+                conn.execute(
+                    "DELETE FROM known_feeds WHERE feed_url = ? AND muc = ?",
+                    (feed_url, muc),
+                )
+                logging.info("Removed stale feed from db: %s -> %s", feed_url, muc)
+                removed += 1
+        conn.commit()
+        if removed:
+            logging.info("Cleaned up %d stale feed record(s) from known_feeds", removed)
+    finally:
+        conn.close()
+
+
 def is_known_feed(feed_url, muc):
     """
     Return True if this (feed_url, muc) pair has been seen before.
