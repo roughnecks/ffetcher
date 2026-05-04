@@ -68,7 +68,7 @@ def get_new_articles(feed_url, muc, summary_max_length=300, badwords=None,
             continue
 
         title   = _clean_text(getattr(entry, "title", "(no title)"))
-        summary = _extract_summary(entry, summary_max_length)
+        summary = _extract_summary(entry, summary_max_length, link)
         images  = _extract_images(entry)
 
         # Drop articles containing a badword in body or link.
@@ -91,10 +91,14 @@ def get_new_articles(feed_url, muc, summary_max_length=300, badwords=None,
     return new_articles
 
 
-def _extract_summary(entry, summary_max_length):
+def _extract_summary(entry, summary_max_length, article_link=None):
     """
     Extract a plain-text summary from a feed entry.
     Tries the summary field first, then content, then gives up.
+
+    If article_link is provided, any occurrence of that URL in the summary
+    is removed to avoid duplicating the link that is already shown separately
+    at the end of the message (e.g. Lemmy embeds the post link in the summary).
     """
     raw = ""
 
@@ -107,6 +111,11 @@ def _extract_summary(entry, summary_max_length):
         return ""
 
     text = _clean_text(raw)
+
+    # Remove the article link if it appears verbatim in the summary text,
+    # since it will be appended separately at the end of the message.
+    if article_link and article_link in text:
+        text = text.replace(article_link, "").strip()
 
     # Truncate long summaries and add ellipsis.
     if len(text) > summary_max_length:
@@ -129,6 +138,7 @@ def _extract_images(entry):
 
     def _add(url):
         if url and url not in seen:
+            # Only include URLs that look like images.
             url_lower = url.lower().split("?")[0]
             if url_lower.endswith(IMAGE_EXTENSIONS):
                 seen.add(url)
@@ -232,6 +242,7 @@ def _clean_text(raw):
     unescaped = html.unescape(raw)
     soup = BeautifulSoup(unescaped, "lxml")
 
+    # Fix Mastodon-specific markup before converting to Markdown.
     _fix_mastodon_links(soup)
 
     # Convert the cleaned HTML to Markdown.
