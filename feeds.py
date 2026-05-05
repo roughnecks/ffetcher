@@ -163,7 +163,7 @@ def _extract_images(entry):
     elif hasattr(entry, "summary") and entry.summary:
         raw = entry.summary
 
-    if raw:
+    if raw and not _is_url(raw.strip()):
         soup = BeautifulSoup(html.unescape(raw), "lxml")
         for img in soup.find_all("img", src=True):
             mime = img.get("type", "")
@@ -171,6 +171,16 @@ def _extract_images(entry):
                 _add(img["src"])
 
     return images
+
+
+def _is_url(text):
+    """
+    Return True if the text is a bare URL with no surrounding markup.
+    Matches any valid URI scheme (http, https, gemini, ftp, etc.) per RFC 3986.
+    Used to skip passing plain URLs to BeautifulSoup, which would otherwise
+    print a spurious warning about receiving a URL instead of HTML.
+    """
+    return bool(re.match(r"^[a-zA-Z][a-zA-Z0-9+\-.]*://\S+$", text.strip()))
 
 
 def _is_allowed_language(text, languages):
@@ -238,8 +248,17 @@ def _clean_text(raw):
     Convert HTML to Markdown using markdownify, preserving the author's
     intended paragraph structure. Mastodon-specific link and emoji quirks
     are fixed in the DOM before conversion.
+
+    If the input is a bare URL with no HTML markup, it is returned as-is
+    to avoid passing it to BeautifulSoup, which would print a spurious warning.
     """
-    unescaped = html.unescape(raw)
+    stripped = raw.strip()
+
+    # Return bare URLs as-is — no HTML to parse.
+    if _is_url(stripped):
+        return stripped
+
+    unescaped = html.unescape(stripped)
     soup = BeautifulSoup(unescaped, "lxml")
 
     # Fix Mastodon-specific markup before converting to Markdown.
