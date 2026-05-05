@@ -150,6 +150,7 @@ if __name__ == "__main__":
             logging.StreamHandler(),
         ],
     )
+    logging.captureWarnings(True)
 
     jid        = os.getenv("BOT_JID")
     password   = os.getenv("BOT_PASSWORD")
