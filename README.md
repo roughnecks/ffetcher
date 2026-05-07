@@ -122,7 +122,7 @@ Changes to `feeds.ini` take effect after restarting the bot. New feeds or MUCs a
 
 ```sh
 source .venv/bin/activate
-python3 bot.py
+python3 ffetcher.py
 ```
 
 *To run the bot in the background you can use `screen`, `tmux`, or a systemd service.*
@@ -140,7 +140,7 @@ After=network.target
 Type=simple
 User=youruser
 WorkingDirectory=/path/to/ffetcher
-ExecStart=/path/to/ffetcher/.venv/bin/python3 bot.py
+ExecStart=/path/to/ffetcher/.venv/bin/python3 ffetcher.py
 Restart=on-failure
 
 [Install]
