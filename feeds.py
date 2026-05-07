@@ -4,7 +4,6 @@ import re
 
 import feedparser
 from bs4 import BeautifulSoup
-from langdetect import detect, LangDetectException
 from markdownify import markdownify
 
 from db import is_new_entry, is_known_feed
@@ -77,6 +76,9 @@ def get_new_articles(feed_url, muc, summary_max_length=300, badwords=None,
             continue
 
         # Drop articles whose detected language is not in the allowed list.
+        # The language filter is only active when languages is non-empty.
+        # langdetect is imported lazily here so that its language profiles
+        # are not loaded into memory when the feature is not in use.
         if languages and not _is_allowed_language(title + " " + summary, languages):
             logging.debug("Filtered by language: %s", link)
             continue
@@ -188,10 +190,15 @@ def _is_allowed_language(text, languages):
     Return True if the detected language of the text is in the allowed list.
     If detection fails (text too short or ambiguous), the article is allowed
     through to avoid dropping legitimate content.
+
+    langdetect is imported here rather than at module level so that its
+    language profiles (~40-50 MB) are only loaded when the feature is
+    actually in use, i.e. when a [languages] section is present in feeds.ini.
     """
     if not text.strip():
         return True
     try:
+        from langdetect import detect, LangDetectException
         detected = detect(text)
         logging.debug("Detected language: %s", detected)
         return detected in languages
