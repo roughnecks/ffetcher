@@ -182,8 +182,7 @@ def _is_url(text):
     Used to skip passing plain URLs to BeautifulSoup, which would otherwise
     print a spurious warning about receiving a URL instead of HTML.
     """
-    return bool(re.match(r"^[a-zA-Z][a-zA-Z0-9+\-.]*://\S+$", text.strip()))
-
+    return bool(re.match(r"^[a-zA-Z][a-zA-Z0-9+\-.]*:/{0,2}\S+$", text.strip()))
 
 def _is_allowed_language(text, languages):
     """
