@@ -236,7 +236,17 @@ def _fix_mastodon_links(soup):
       visible text (e.g. #IRC, @user).
     - All other links are replaced with their full href.
     - Custom emoji <img> tags are replaced with their alt text.
+    - Mastodon UI spans (invisible text, link origin tags) are removed
+      before conversion to avoid confusing markdownify.
     """
+    # Remove Mastodon UI spans that are not part of the actual content:
+    # - "invisible": used to hide parts of long URLs visually
+    # - "link-origin-tag": shows the domain in brackets, e.g. [calebh.top]
+    for span in soup.find_all("span", class_=lambda c: c and (
+        "invisible" in c or "link-origin-tag" in c
+    )):
+        span.decompose()
+
     for a in soup.find_all("a", href=True):
         href = a["href"]
         classes = a.get("class", [])
