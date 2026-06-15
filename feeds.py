@@ -2,6 +2,7 @@ import html
 import logging
 import re
 
+import asyncio
 import feedparser
 from bs4 import BeautifulSoup
 from markdownify import markdownify
@@ -12,7 +13,7 @@ from db import is_new_entry, is_known_feed
 IMAGE_EXTENSIONS = (".jpg", ".jpeg", ".png", ".gif", ".webp", ".avif", ".svg")
 
 
-def get_new_articles(feed_url, muc, summary_max_length=300, badwords=None,
+async def get_new_articles(feed_url, muc, summary_max_length=300, badwords=None,
                      user_agent=None, languages=None):
     """
     Parse a feed and return a list of new articles for the given MUC.
@@ -32,7 +33,26 @@ def get_new_articles(feed_url, muc, summary_max_length=300, badwords=None,
 
     # Pass a custom User-Agent to feedparser so servers can identify the
     # client and are less likely to block it as an anonymous scraper.
-    feed = feedparser.parse(feed_url, agent=user_agent)
+    # feed = feedparser.parse(feed_url, agent=user_agent)
+
+    try:
+      loop = asyncio.get_running_loop()
+
+      feed = await asyncio.wait_for(
+          loop.run_in_executor(
+              None,
+              lambda: feedparser.parse(feed_url, agent=user_agent)
+          ),
+          timeout=30
+      )
+
+    except asyncio.TimeoutError:
+        logging.warning("Timeout fetching feed: %s", feed_url)
+        return []
+
+    except Exception as e:
+        logging.warning("Error fetching feed %s: %s", feed_url, e)
+        return []
 
     # feed.bozo is set for any parsing anomaly, including minor ones like a
     # missing Content-Type header. Only treat it as an error if there are no

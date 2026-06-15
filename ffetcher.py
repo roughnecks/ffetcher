@@ -84,7 +84,7 @@ class FeedBot(slixmpp.ClientXMPP):
         for muc, feed_urls in self.feeds_config.items():
             for feed_url in feed_urls:
                 try:
-                    articles = get_new_articles(
+                    articles = await get_new_articles(
                         feed_url, muc, self.summary_max_length,
                         self.badwords, self.user_agent, self.languages
                     )
