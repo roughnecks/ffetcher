@@ -249,32 +249,41 @@ def _contains_badword(text, link, badwords):
 def _fix_mastodon_links(soup):
     """
     Fix Mastodon's habit of splitting URLs and hashtags across multiple
-    <span> tags inside <a> elements. We do this directly in the DOM so
-    that the structure is clean before markdownify processes it.
+    <span> tags inside <a> elements.
 
     - Hashtag links (/tags/ in href) and mentions are replaced with their
       visible text (e.g. #IRC, @user).
-    - All other links are replaced with their full href.
+    - Normal links are replaced with their href.
+    - Links with an empty href (e.g. gemini:// URLs) are reconstructed
+      from their visible and invisible text fragments.
     - Custom emoji <img> tags are replaced with their alt text.
-    - Mastodon UI spans (invisible text, link origin tags) are removed
-      before conversion to avoid confusing markdownify.
+    - Mastodon link origin tags are removed.
     """
-    # Remove Mastodon UI spans that are not part of the actual content:
-    # - "invisible": used to hide parts of long URLs visually
-    # - "link-origin-tag": shows the domain in brackets, e.g. [calebh.top]
-    for span in soup.find_all("span", class_=lambda c: c and (
-        "invisible" in c or "link-origin-tag" in c
-    )):
-        span.decompose()
 
     for a in soup.find_all("a", href=True):
         href = a["href"]
         classes = a.get("class", [])
+
+        # Hashtags and mentions
         if "/tags/" in href or "mention" in classes:
             a.replace_with(a.get_text(separator=""))
-        else:
+
+        # Normal links
+        elif href:
             a.replace_with(href)
 
+        # Empty href: reconstruct URL from span contents
+        else:
+            a.replace_with(a.get_text(separator=""))
+
+    # Remove Mastodon's "[example.org]" decorations
+    for span in soup.find_all(
+        "span",
+        class_=lambda c: c and "link-origin-tag" in c
+    ):
+        span.decompose()
+
+    # Replace custom emoji images with their textual alt
     for img in soup.find_all("img", alt=True):
         img.replace_with(img["alt"])
 
