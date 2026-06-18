@@ -150,6 +150,5 @@ WantedBy=multi-user.target
 Then enable and start it:
 
 ```sh
-systemctl enable ffetcher
-systemctl start ffetcher
+systemctl enable --now ffetcher.service
 ```
