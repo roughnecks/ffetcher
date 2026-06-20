@@ -18,8 +18,8 @@ MUC_PING_INTERVAL = 60
 class FeedBot(slixmpp.ClientXMPP):
 
     def __init__(self, jid, password, nick, feeds_config, interval,
-                 summary_max_length, badwords, languages, quote_summary,
-                 user_agent, show_images):
+                 summary_max_length, badwords, badwords_links, languages,
+                 quote_summary, user_agent, show_images):
         slixmpp.ClientXMPP.__init__(self, jid, password)
 
         self.nick = nick
@@ -27,6 +27,7 @@ class FeedBot(slixmpp.ClientXMPP):
         self.interval = interval
         self.summary_max_length = summary_max_length
         self.badwords = badwords
+        self.badwords_links = badwords_links
         self.languages = languages
         self.quote_summary = quote_summary
         self.user_agent = user_agent
@@ -86,7 +87,8 @@ class FeedBot(slixmpp.ClientXMPP):
                 try:
                     articles = await get_new_articles(
                         feed_url, muc, self.summary_max_length,
-                        self.badwords, self.user_agent, self.languages
+                        self.badwords, self.badwords_links,
+                        self.user_agent, self.languages
                     )
                 except Exception as e:
                     logging.error("Error fetching feed %s: %s", feed_url, e)
@@ -168,7 +170,7 @@ if __name__ == "__main__":
 
     init_db(db_path)
 
-    feeds_config, badwords, languages = load_feeds(feeds_file)
+    feeds_config, badwords, badwords_links, languages = load_feeds(feeds_file)
     if not feeds_config:
         raise SystemExit("No feeds configured. Check %s" % feeds_file)
 
@@ -178,8 +180,8 @@ if __name__ == "__main__":
     cleanup_feeds(feeds_config)
 
     bot = FeedBot(jid, password, nick, feeds_config, interval,
-                  summary_max_length, badwords, languages, quote_summary,
-                  user_agent, show_images)
+                  summary_max_length, badwords, badwords_links, languages,
+                  quote_summary, user_agent, show_images)
     bot.register_plugin("xep_0030")  # Service Discovery
     bot.register_plugin("xep_0045")  # Multi-User Chat
     bot.register_plugin("xep_0199")  # XMPP Ping
