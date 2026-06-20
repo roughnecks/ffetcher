@@ -14,7 +14,7 @@ IMAGE_EXTENSIONS = (".jpg", ".jpeg", ".png", ".gif", ".webp", ".avif", ".svg")
 
 
 async def get_new_articles(feed_url, muc, summary_max_length=300, badwords=None,
-                     user_agent=None, languages=None):
+                     badwords_links=None, user_agent=None, languages=None):
     """
     Parse a feed and return a list of new articles for the given MUC.
     Each article is a dict with keys: title, summary, link, images.
@@ -22,12 +22,15 @@ async def get_new_articles(feed_url, muc, summary_max_length=300, badwords=None,
 
     On the very first run for a (feed_url, muc) pair, all existing articles
     are recorded in the database but not returned, to avoid flooding the MUC.
-    Articles whose body or link contain a badword are silently dropped.
+    Articles whose title/body contain a badword, or whose link contains a
+    link badword, are silently dropped.
     If a languages list is provided, articles not matching any of the allowed
     languages are silently dropped.
     """
     if badwords is None:
         badwords = []
+    if badwords_links is None:
+        badwords_links = []
     if languages is None:
         languages = []
 
@@ -90,9 +93,14 @@ async def get_new_articles(feed_url, muc, summary_max_length=300, badwords=None,
         summary = _extract_summary(entry, summary_max_length, link)
         images  = _extract_images(entry)
 
-        # Drop articles containing a badword in body or link.
-        if _contains_badword(title + " " + summary, link, badwords):
+        # Drop articles whose title or body contains a text badword.
+        if _contains_badword(title + " " + summary, badwords):
             logging.debug("Filtered by badword: %s", link)
+            continue
+
+        # Drop articles whose link contains a link badword.
+        if _contains_link_badword(link, badwords_links):
+            logging.debug("Filtered by link badword: %s", link)
             continue
 
         # Drop articles whose detected language is not in the allowed list.
@@ -227,20 +235,31 @@ def _is_allowed_language(text, languages):
         return True
 
 
-def _contains_badword(text, link, badwords):
+def _contains_badword(text, badwords):
     """
-    Return True if any badword is found in the text or in the link.
-    - Text matching uses word boundaries (case-insensitive whole-word match).
-    - Link matching uses plain substring search, which is more reliable for
-      URL paths where delimiters like / and @ are not word boundary characters.
+    Return True if any badword is found as a whole word in the text.
+    Matching is case-insensitive and word-boundary aware, so "casino"
+    will not match "casinetto".
     """
     haystack_text = text.lower()
-    haystack_link = link.lower()
     for word in badwords:
         w = word.lower()
         pattern = re.compile(r"\b" + re.escape(w) + r"\b")
         if pattern.search(haystack_text):
             return True
+    return False
+
+
+def _contains_link_badword(link, badwords_links):
+    """
+    Return True if any link badword is found in the link.
+    Matching is plain substring search, which is more reliable for URL
+    paths where delimiters like / and @ are not word boundary characters
+    (e.g. to silence a specific account by matching "@someaccount").
+    """
+    haystack_link = link.lower()
+    for word in badwords_links:
+        w = word.lower()
         if w in haystack_link:
             return True
     return False
