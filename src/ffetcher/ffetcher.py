@@ -6,6 +6,7 @@ import os
 
 import slixmpp
 from dotenv import load_dotenv
+load_dotenv(".env")
 
 from .db import init_db, cleanup_feeds
 from .feeds import get_new_articles
