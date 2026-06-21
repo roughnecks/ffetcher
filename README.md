@@ -93,7 +93,9 @@ BOT_LOG_FILE=./bot.log
 
 Each section name is a MUC JID. Each key is an arbitrary label and its value is a feed URL. A MUC can have any number of feeds.
 
-The optional `[badwords]` section contains words that, if found in an article's body or link, cause the article to be silently dropped. Matching is case-insensitive and whole-word only for body text, and substring-based for links, so `@account` will match any link containing that string.
+The optional `[badwords]` section contains words that, if found as a whole word in an article's title or body text, cause the article to be silently dropped. Matching is case-insensitive and whole-word only.
+
+The optional `[badwords_links]` section contains strings that, if found anywhere in an article's link, cause the article to be silently dropped. Matching is case-insensitive substring search, which is more reliable for URLs, for example to silence a specific account with `@account`.
 
 The optional `[languages]` section contains ISO 639-1 language codes (e.g. `en`, `it`, `de`) for the languages you want to receive. If this section is absent or empty, all languages are accepted and no filtering takes place.
 
@@ -108,7 +110,11 @@ feed1 = https://other.example.com/atom.xml
 [badwords]
 word1 = casino
 word2 = sponsor
-word3 = @someaccount
+word3 = giveaway
+
+[badwords_links]
+word1 = @someaccount
+word2 = example.com/airport
 
 [languages]
 lang1 = en
