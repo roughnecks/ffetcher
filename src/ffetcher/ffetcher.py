@@ -5,8 +5,7 @@ import logging
 import os
 
 import slixmpp
-from dotenv import load_dotenv
-load_dotenv(".env")
+from dotenv import load_dotenv, find_dotenv
 
 from .db import init_db, cleanup_feeds
 from .feeds import get_new_articles
@@ -139,7 +138,12 @@ class FeedBot(slixmpp.ClientXMPP):
 
 
 def main():
-    load_dotenv()
+    # usecwd=True ensures .env is searched starting from the directory the
+    # user runs the command from, rather than from the installed package
+    # location (relevant when ffetcher is installed via pipx, since the
+    # package then lives under ~/.local/pipx/venvs/ rather than the user's
+    # working directory).
+    load_dotenv(find_dotenv(usecwd=True))
 
     log_level  = os.getenv("BOT_LOG_LEVEL", "INFO").upper()
     log_file   = os.getenv("BOT_LOG_FILE", "bot.log")
