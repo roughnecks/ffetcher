@@ -1,6 +1,6 @@
 # ffetcher (feed fetcher)
 
-An XMPP bot that monitors RSS and Atom feeds and posts new articles to one or more MUC rooms.
+An XMPP bot that monitors RSS and Atom feeds and posts new articles to one or more MUC rooms. It specializes on fediverse feeds.
 This code is AI generated and reviewed/tested by the author.
 
 ---
