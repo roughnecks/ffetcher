@@ -76,6 +76,12 @@ To upgrade or switch to a different branch/tag/commit later, add `--force`:
 pipx install --force git+https://code.woodpeckersnest.space/roughnecks/ffetcher.git@branch-name
 ```
 
+If the `--force` option doesn't seem to work, just uninstall and reinstall again with `pipx`
+
+```sh
+pipx uninstall ffetcher
+```
+
 Once installed, create a working directory for your configuration files (see [Configuration](#configuration) below) and run:
 
 ```sh
