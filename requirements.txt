@@ -3,5 +3,7 @@ feedparser
 beautifulsoup4
 lxml
 markdownify
-langdetect
 python-dotenv
+
+# Optional: required only if you use the [languages] filter in feeds.ini.
+# langdetect

@@ -1,0 +1,26 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "ffetcher"
+version = "1.0.0"
+description = "An XMPP bot that monitors RSS and Atom feeds and posts new articles to MUC rooms"
+requires-python = ">=3.10"
+dependencies = [
+    "slixmpp",
+    "feedparser",
+    "beautifulsoup4",
+    "lxml",
+    "markdownify",
+    "python-dotenv",
+]
+
+[project.optional-dependencies]
+languages = ["langdetect"]
+
+[project.scripts]
+ffetcher = "ffetcher.ffetcher:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]

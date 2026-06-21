@@ -7,9 +7,9 @@ import os
 import slixmpp
 from dotenv import load_dotenv
 
-from db import init_db, cleanup_feeds
-from feeds import get_new_articles
-from config import load_feeds
+from .db import init_db, cleanup_feeds
+from .feeds import get_new_articles
+from .config import load_feeds
 
 # How often to ping each MUC to verify we are still joined (seconds).
 MUC_PING_INTERVAL = 60
@@ -137,7 +137,7 @@ class FeedBot(slixmpp.ClientXMPP):
         self.reconnect()
 
 
-if __name__ == "__main__":
+def main():
     load_dotenv()
 
     log_level  = os.getenv("BOT_LOG_LEVEL", "INFO").upper()
@@ -188,3 +188,7 @@ if __name__ == "__main__":
 
     bot.connect()
     asyncio.get_event_loop().run_forever()
+
+
+if __name__ == "__main__":
+    main()

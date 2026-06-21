@@ -7,7 +7,7 @@ import feedparser
 from bs4 import BeautifulSoup
 from markdownify import markdownify
 
-from db import is_new_entry, is_known_feed
+from .db import is_new_entry, is_known_feed
 
 # Image extensions considered valid for inline preview.
 IMAGE_EXTENSIONS = (".jpg", ".jpeg", ".png", ".gif", ".webp", ".avif", ".svg")

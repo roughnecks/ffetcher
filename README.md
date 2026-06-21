@@ -34,6 +34,56 @@ ffetcher is careful not to hammer feed servers: there is a configurable delay be
 
 ## Installation
 
+ffetcher can be installed either with pipx (recommended for running it as a standalone command) or with a classic venv + pip setup (recommended if you want to edit the code directly).
+
+### Option A: pipx
+
+[pipx](https://pipx.pypa.io/) installs ffetcher into its own isolated environment and exposes the `ffetcher` command globally, without affecting your system Python packages.
+
+Install the latest version from the main branch:
+
+```sh
+pipx install git+https://code.woodpeckersnest.space/roughnecks/ffetcher.git
+```
+
+Install a specific branch:
+
+```sh
+pipx install git+https://code.woodpeckersnest.space/roughnecks/ffetcher.git@branch-name
+```
+
+Install a specific tag (release):
+
+```sh
+pipx install git+https://code.woodpeckersnest.space/roughnecks/ffetcher.git@v1.0.0
+```
+
+Install a specific commit:
+
+```sh
+pipx install git+https://code.woodpeckersnest.space/roughnecks/ffetcher.git@<commit-hash>
+```
+
+To install the optional language filter support ([languages] section in feeds.ini):
+
+```sh
+pipx install "ffetcher[languages] @ git+https://code.woodpeckersnest.space/roughnecks/ffetcher.git"
+```
+
+To upgrade or switch to a different branch/tag/commit later, add `--force`:
+
+```sh
+pipx install --force git+https://code.woodpeckersnest.space/roughnecks/ffetcher.git@branch-name
+```
+
+Once installed, create a working directory for your configuration files (see [Configuration](#configuration) below) and run:
+
+```sh
+ffetcher
+```
+
+### Option B: venv + pip
+
 ```sh
 git clone https://code.woodpeckersnest.space/roughnecks/ffetcher.git
 cd ffetcher
@@ -53,7 +103,7 @@ cp .env.example .env
 cp feeds.ini.example feeds.ini
 ```
 
-Edit both files before starting the bot.
+Edit both files before starting the bot. With pipx, place these files in the directory from which you run the `ffetcher` command — they are not stored inside the pipx-managed environment.
 
 ### .env
 
@@ -126,6 +176,14 @@ Changes to `feeds.ini` take effect after restarting the bot. New feeds or MUCs a
 
 ## Running
 
+### With pipx
+
+```sh
+ffetcher
+```
+
+### With venv + pip
+
 ```sh
 source .venv/bin/activate
 python3 ffetcher.py
@@ -151,6 +209,12 @@ Restart=on-failure
 
 [Install]
 WantedBy=multi-user.target
+```
+
+If installed via pipx, point `ExecStart` to the pipx-managed binary instead:
+
+```ini
+ExecStart=/home/youruser/.local/bin/ffetcher
 ```
 
 Then enable and start it:
