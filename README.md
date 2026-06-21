@@ -96,7 +96,17 @@ pip install -r requirements.txt
 
 ## Configuration
 
-ffetcher uses two configuration files: `.env` for credentials and bot settings, and `feeds.ini` for the feed list. Both are created by copying the provided examples.
+ffetcher uses two configuration files: `.env` for credentials and bot settings, and `feeds.ini` for the feed list.
+
+If either file is missing from the directory you run ffetcher from, it will create both with default placeholder content and exit, so you have something to edit instead of an error. This applies to both the pipx and venv + pip installation methods.
+
+```sh
+ffetcher
+# Created .env with default values. Edit it before running ffetcher again.
+# Created feeds.ini with default values. Edit it before running ffetcher again.
+```
+
+Alternatively, with the venv + pip setup you can still copy the example files from the repository directly:
 
 ```sh
 cp .env.example .env
