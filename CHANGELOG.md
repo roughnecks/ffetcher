@@ -7,6 +7,9 @@ All notable changes to this project are documented in this file.
 ### Added
 - pipx packaging support (`src/ffetcher/` layout, `pyproject.toml`, `ffetcher` entry point)
 
+### Changed
+- Renamed the package's main module to `__main__.py`, removing the redundant `ffetcher.ffetcher` entry point path
+
 ## [2.1.1]
 
 - RSS/Atom feed monitoring with per-MUC feed configuration
