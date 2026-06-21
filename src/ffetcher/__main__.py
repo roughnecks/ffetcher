@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+# This module is invoked both as `python -m ffetcher` and via the `ffetcher`
+# console script installed by pipx/pip (see pyproject.toml).
 
 import asyncio
 import logging
