@@ -14,6 +14,79 @@ from .config import load_feeds
 # How often to ping each MUC to verify we are still joined (seconds).
 MUC_PING_INTERVAL = 60
 
+# Default content written to .env when it does not exist yet.
+ENV_TEMPLATE = """BOT_JID=ffetcher@example.com
+BOT_PASSWORD=changeme
+BOT_NICK=ffetcher
+BOT_DB_PATH=./feeds.db
+BOT_FEEDS_FILE=./feeds.ini
+BOT_INTERVAL=600
+BOT_SUMMARY_MAX_LENGTH=600
+BOT_QUOTE_SUMMARY=false
+BOT_SHOW_IMAGES=false
+BOT_USER_AGENT=ffetcher/1.0 +https://example.com
+BOT_LOG_LEVEL=INFO
+BOT_LOG_FILE=./bot.log
+"""
+
+# Default content written to feeds.ini when it does not exist yet.
+FEEDS_INI_TEMPLATE = """# Each section name is the JID of a MUC room.
+# Each key is an arbitrary label; its value is a feed URL.
+# A MUC can have any number of feeds.
+[room-one@conference.example.com]
+feed1 = https://www.debian.org/News/news
+feed2 = https://www.debian.org/security/dsa-long
+[room-two@conference.example.com]
+feed1 = https://other.example.com/atom.xml
+# Articles whose title or body text contain any of these words will be
+# silently dropped. Matching is case-insensitive and whole-word only,
+# so "casino" will not match "casinetto". This section is optional.
+[badwords]
+word1 = casino
+word2 = sponsor
+word3 = giveaway
+# Articles whose link contains any of these strings will be silently
+# dropped. Matching is case-insensitive substring search, which is more
+# reliable for URLs (e.g. to silence a specific account). This section
+# is optional.
+[badwords_links]
+word1 = @someaccount
+word2 = example.com/airport
+# Only post articles written in these languages (ISO 639-1 codes).
+# If this section is absent or empty, all languages are accepted.
+# Detection is automatic and may occasionally misidentify very short texts.
+[languages]
+lang1 = en
+lang2 = it
+"""
+
+
+def _scaffold_config(env_path, feeds_path):
+    """
+    Create .env and feeds.ini with default template content if they do not
+    already exist in the current working directory. This allows a first-time
+    user (especially under pipx, where the example files are not otherwise
+    available) to get a working starting point without cloning the repository.
+
+    Returns True if at least one file was created, so the caller can exit
+    and let the user edit the new files before starting the bot for real.
+    """
+    created = False
+
+    if not os.path.exists(env_path):
+        with open(env_path, "w", encoding="utf-8") as f:
+            f.write(ENV_TEMPLATE)
+        print("Created %s with default values. Edit it before running ffetcher again." % env_path)
+        created = True
+
+    if not os.path.exists(feeds_path):
+        with open(feeds_path, "w", encoding="utf-8") as f:
+            f.write(FEEDS_INI_TEMPLATE)
+        print("Created %s with default values. Edit it before running ffetcher again." % feeds_path)
+        created = True
+
+    return created
+
 
 class FeedBot(slixmpp.ClientXMPP):
 
@@ -138,6 +211,12 @@ class FeedBot(slixmpp.ClientXMPP):
 
 
 def main():
+    # If .env or feeds.ini do not exist in the current working directory,
+    # create them with default content and exit, so a first-time user
+    # (especially under pipx) has something to edit instead of an error.
+    if _scaffold_config(".env", "feeds.ini"):
+        return
+
     # usecwd=True ensures .env is searched starting from the directory the
     # user runs the command from, rather than from the installed package
     # location (relevant when ffetcher is installed via pipx, since the
