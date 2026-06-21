@@ -97,8 +97,10 @@ git clone https://code.woodpeckersnest.space/roughnecks/ffetcher.git
 cd ffetcher
 python3 -m venv .venv
 source .venv/bin/activate
-pip install -r requirements.txt
+pip install .
 ```
+
+This installs ffetcher and its dependencies into the venv, and exposes the `ffetcher` command within it (see [Running](#running) below).
 
 ---
 
@@ -204,7 +206,7 @@ ffetcher
 
 ```sh
 source .venv/bin/activate
-python3 ffetcher.py
+ffetcher
 ```
 
 *To run the bot in the background you can use `screen`, `tmux`, or a systemd service.*
@@ -222,7 +224,7 @@ After=network.target
 Type=simple
 User=youruser
 WorkingDirectory=/path/to/ffetcher
-ExecStart=/path/to/ffetcher/.venv/bin/python3 ffetcher.py
+ExecStart=/path/to/ffetcher/.venv/bin/ffetcher
 Restart=on-failure
 
 [Install]
