@@ -1,7 +1,0 @@
-slixmpp
-feedparser
-beautifulsoup4
-lxml
-markdownify
-langdetect
-python-dotenv
