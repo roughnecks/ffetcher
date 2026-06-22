@@ -42,7 +42,7 @@ feed2 = https://www.debian.org/security/dsa-long
 feed1 = https://other.example.com/atom.xml
 # Articles whose title or body text contain any of these words will be
 # silently dropped. Matching is case-insensitive and whole-word only,
-# so "casino" will not match "casinetto". This section is optional.
+# so "casino" will not match "casinotto". This section is optional.
 [badwords]
 word1 = casino
 word2 = sponsor
