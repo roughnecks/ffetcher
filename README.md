@@ -90,8 +90,6 @@ ffetcher
 
 ### Option B: venv + pip
 
-* If you need language filters, please uncomment the last line in `requirements.txt` file before continuing to install with `pip`
-
 ```sh
 git clone https://code.woodpeckersnest.space/roughnecks/ffetcher.git
 cd ffetcher
