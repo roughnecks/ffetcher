@@ -4,3 +4,5 @@ __pycache__/
 bot.log
 feeds.db
 feeds.ini
+build/
+*.egg-info/
