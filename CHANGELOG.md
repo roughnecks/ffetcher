@@ -2,7 +2,7 @@
 
 All notable changes to this project are documented in this file.
 
-## [Unreleased]
+## [3.0.0]
 
 ### Added
 - pipx packaging support (`src/ffetcher/` layout, `pyproject.toml`, `ffetcher` entry point)
