@@ -272,9 +272,13 @@ def _fix_mastodon_links(soup):
 
     - Hashtag links (/tags/ in href) and mentions are replaced with their
       visible text (e.g. #IRC, @user).
-    - Normal links are replaced with their href.
-    - Links with an empty href (e.g. gemini:// URLs) are reconstructed
-      from their visible and invisible text fragments.
+    - Links where the visible text is meaningful (different from the href
+      and not itself a URL) are converted to Markdown [text](url) format,
+      preserving the label for readability in generic RSS feeds.
+    - Links where the visible text equals the href, or is itself a URL,
+      are replaced with the bare href (Mastodon-style truncated links).
+    - Links with an empty href (e.g. gemini:// URLs on some instances) are
+      reconstructed from their visible and invisible text fragments.
     - Custom emoji <img> tags are replaced with their alt text.
     - Mastodon link origin tags are removed.
     """
@@ -282,27 +286,34 @@ def _fix_mastodon_links(soup):
     for a in soup.find_all("a", href=True):
         href = a["href"]
         classes = a.get("class", [])
+        visible = a.get_text(separator="")
 
-        # Hashtags and mentions
+        # Hashtags and mentions: show visible text only.
         if "/tags/" in href or "mention" in classes:
-            a.replace_with(a.get_text(separator=""))
+            a.replace_with(visible)
 
-        # Normal links
-        elif href:
+        # Empty href: reconstruct URL from span contents (e.g. gemini://).
+        elif not href:
+            a.replace_with(visible)
+
+        # Meaningful label: convert to Markdown [text](url).
+        # A label is meaningful if it differs from the href and is not
+        # itself a bare URL (which would add no information over the href).
+        elif visible and visible != href and not _is_url(visible):
+            a.replace_with("[%s](%s)" % (visible, href))
+
+        # Bare URL or label identical to href: just use the href.
+        else:
             a.replace_with(href)
 
-        # Empty href: reconstruct URL from span contents
-        else:
-            a.replace_with(a.get_text(separator=""))
-
-    # Remove Mastodon's "[example.org]" decorations
+    # Remove Mastodon's "[example.org]" decorations.
     for span in soup.find_all(
         "span",
         class_=lambda c: c and "link-origin-tag" in c
     ):
         span.decompose()
 
-    # Replace custom emoji images with their textual alt
+    # Replace custom emoji images with their textual alt.
     for img in soup.find_all("img", alt=True):
         img.replace_with(img["alt"])
 
