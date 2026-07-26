@@ -22,6 +22,8 @@ A language filter allows only articles written in the configured languages to be
 
 ffetcher is careful not to hammer feed servers: there is a configurable delay between consecutive feed downloads, and a custom User-Agent string identifies the bot to server administrators.
 
+**Memory Footprint**: with the language filter loaded, it can take a bit more than 100MB RAM for about 15 feeds. Without the language filter and about 50 feeds it's around 160MB after 10 days uptime (reported).
+
 ---
 
 ## Requirements
