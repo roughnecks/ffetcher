@@ -22,8 +22,6 @@ A language filter allows only articles written in the configured languages to be
 
 ffetcher is careful not to hammer feed servers: there is a configurable delay between consecutive feed downloads, and a custom User-Agent string identifies the bot to server administrators.
 
-**Memory Footprint**: with the language filter loaded, it can take a bit more than 100MB RAM for about 15 feeds. Without the language filter and about 50 feeds it's around 160MB after 10 days uptime (reported).
-
 ---
 
 ## Requirements
@@ -161,7 +159,7 @@ BOT_LOG_FILE=./bot.log
 
 ### feeds.ini
 
-Each section name is a MUC JID. Each key is an arbitrary label and its value is a feed URL. A MUC can have any number of feeds.
+Each section name is a MUC JID. For 1:1 chat delivery, prefix the section name with `chat:` (e.g. `[chat:user@example.com]`). Each key is an arbitrary label and its value is a feed URL. Both MUCs and chats can have any number of feeds.
 
 The optional `[badwords]` section contains words that, if found as a whole word in an article's title or body text, cause the article to be silently dropped. Matching is case-insensitive and whole-word only.
 
@@ -175,6 +173,9 @@ feed1 = https://www.debian.org/News/news
 feed2 = https://www.debian.org/security/dsa-long
 
 [room-two@conference.example.com]
+feed1 = https://other.example.com/atom.xml
+
+[chat:user@example.com]
 feed1 = https://other.example.com/atom.xml
 
 [badwords]
