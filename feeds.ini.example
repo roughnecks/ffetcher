@@ -1,36 +1,31 @@
 # Each section name is the JID of a MUC room.
 # Each key is an arbitrary label; its value is a feed URL.
 # A MUC can have any number of feeds.
-
 [room-one@conference.example.com]
 feed1 = https://www.debian.org/News/news
 feed2 = https://www.debian.org/security/dsa-long
-
 [room-two@conference.example.com]
 feed1 = https://other.example.com/atom.xml
-
+# For 1:1 chat delivery, prefix the section name with "chat:".
+[chat:user@example.com]
+feed1 = https://other.example.com/atom.xml
 # Articles whose title or body text contain any of these words will be
 # silently dropped. Matching is case-insensitive and whole-word only,
 # so "casino" will not match "casinotto". This section is optional.
-
 [badwords]
 word1 = casino
 word2 = sponsor
 word3 = giveaway
-
 # Articles whose link contains any of these strings will be silently
 # dropped. Matching is case-insensitive substring search, which is more
 # reliable for URLs (e.g. to silence a specific account). This section
 # is optional.
-
 [badwords_links]
 word1 = @someaccount
 word2 = example.com/airport
-
 # Only post articles written in these languages (ISO 639-1 codes).
 # If this section is absent or empty, all languages are accepted.
 # Detection is automatic and may occasionally misidentify very short texts.
-
 [languages]
 lang1 = en
 lang2 = it
