@@ -40,6 +40,9 @@ feed1 = https://www.debian.org/News/news
 feed2 = https://www.debian.org/security/dsa-long
 [room-two@conference.example.com]
 feed1 = https://other.example.com/atom.xml
+# For 1:1 chat delivery, prefix the section name with "chat:".
+[chat:user@example.com]
+feed1 = https://other.example.com/atom.xml
 # Articles whose title or body text contain any of these words will be
 # silently dropped. Matching is case-insensitive and whole-word only,
 # so "casino" will not match "casinotto". This section is optional.
@@ -92,13 +95,14 @@ def _scaffold_config(env_path, feeds_path):
 
 class FeedBot(slixmpp.ClientXMPP):
 
-    def __init__(self, jid, password, nick, feeds_config, interval,
-                 summary_max_length, badwords, badwords_links, languages,
-                 quote_summary, user_agent, show_images):
+    def __init__(self, jid, password, nick, feeds_config, message_types,
+                 interval, summary_max_length, badwords, badwords_links,
+                 languages, quote_summary, user_agent, show_images):
         slixmpp.ClientXMPP.__init__(self, jid, password)
 
         self.nick = nick
-        self.feeds_config = feeds_config  # dict: {muc: [feed_url, ...]}
+        self.feeds_config = feeds_config    # dict: {jid: [feed_url, ...]}
+        self.message_types = message_types  # dict: {jid: "groupchat"|"chat"}
         self.interval = interval
         self.summary_max_length = summary_max_length
         self.badwords = badwords
@@ -115,9 +119,11 @@ class FeedBot(slixmpp.ClientXMPP):
         await self.get_roster()
         self.send_presence()
 
-        for muc in self.feeds_config:
-            self.plugin["xep_0045"].join_muc(muc, self.nick)
-            logging.info("Joined MUC: %s", muc)
+        # Join only MUC destinations; 1:1 chats need no join step.
+        for jid, msg_type in self.message_types.items():
+            if msg_type == "groupchat":
+                self.plugin["xep_0045"].join_muc(jid, self.nick)
+                logging.info("Joined MUC: %s", jid)
 
         # Wait a moment before starting loops, to let MUC joins settle.
         await asyncio.sleep(5)
@@ -133,11 +139,13 @@ class FeedBot(slixmpp.ClientXMPP):
         """
         Periodically ping each MUC to verify we are still joined.
         If a ping fails, attempt to rejoin the room.
+        1:1 chats are skipped as they need no join state.
         """
         while True:
             await asyncio.sleep(MUC_PING_INTERVAL)
-            for muc in self.feeds_config:
-                await self._ping_muc(muc)
+            for jid, msg_type in self.message_types.items():
+                if msg_type == "groupchat":
+                    await self._ping_muc(jid)
 
     async def _ping_muc(self, muc):
         """
@@ -157,11 +165,12 @@ class FeedBot(slixmpp.ClientXMPP):
                 logging.error("Failed to rejoin MUC %s: %s", muc, rejoin_err)
 
     async def check_feeds(self):
-        for muc, feed_urls in self.feeds_config.items():
+        for jid, feed_urls in self.feeds_config.items():
+            msg_type = self.message_types[jid]
             for feed_url in feed_urls:
                 try:
                     articles = await get_new_articles(
-                        feed_url, muc, self.summary_max_length,
+                        feed_url, jid, self.summary_max_length,
                         self.badwords, self.badwords_links,
                         self.user_agent, self.languages
                     )
@@ -171,9 +180,9 @@ class FeedBot(slixmpp.ClientXMPP):
 
                 for article in articles:
                     self.send_message(
-                        mto=muc,
+                        mto=jid,
                         mbody=self.format_message(article),
-                        mtype="groupchat",
+                        mtype=msg_type,
                     )
                     await asyncio.sleep(1)
 
@@ -182,9 +191,9 @@ class FeedBot(slixmpp.ClientXMPP):
                     if self.show_images:
                         for image_url in article["images"]:
                             self.send_message(
-                                mto=muc,
+                                mto=jid,
                                 mbody=image_url,
-                                mtype="groupchat",
+                                mtype=msg_type,
                             )
                             await asyncio.sleep(1)
 
@@ -256,7 +265,7 @@ def main():
 
     init_db(db_path)
 
-    feeds_config, badwords, badwords_links, languages = load_feeds(feeds_file)
+    feeds_config, message_types, badwords, badwords_links, languages = load_feeds(feeds_file)
     if not feeds_config:
         raise SystemExit("No feeds configured. Check %s" % feeds_file)
 
@@ -265,7 +274,7 @@ def main():
     # articles from being posted as if the feed had never been seen.
     cleanup_feeds(feeds_config)
 
-    bot = FeedBot(jid, password, nick, feeds_config, interval,
+    bot = FeedBot(jid, password, nick, feeds_config, message_types, interval,
                   summary_max_length, badwords, badwords_links, languages,
                   quote_summary, user_agent, show_images)
     bot.register_plugin("xep_0030")  # Service Discovery
