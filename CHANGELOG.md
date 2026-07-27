@@ -4,6 +4,7 @@ All notable changes to this project are documented in this file.
 
 ## [Unreleased]
 - 1:1 chat delivery: sections prefixed with `chat:` in `feeds.ini` send articles as private messages instead of groupchat
+- Feed deduplication: feeds shared across multiple destinations are now downloaded only once per cycle
 
 ## [3.0.0]
 
