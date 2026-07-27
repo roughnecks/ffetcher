@@ -5,6 +5,7 @@
 import asyncio
 import logging
 import os
+from collections import defaultdict
 
 import slixmpp
 from dotenv import load_dotenv, find_dotenv
@@ -93,6 +94,22 @@ def _scaffold_config(env_path, feeds_path):
     return created
 
 
+def _build_feed_map(feeds_config):
+    """
+    Invert the feeds_config dict to build a map from feed URL to the list
+    of destination JIDs that subscribe to it. This allows each feed to be
+    downloaded only once even when it appears in multiple destinations.
+
+    Input:  {jid: [feed_url, ...]}
+    Output: {feed_url: [jid, ...]}
+    """
+    feed_map = defaultdict(list)
+    for jid, feed_urls in feeds_config.items():
+        for feed_url in feed_urls:
+            feed_map[feed_url].append(jid)
+    return feed_map
+
+
 class FeedBot(slixmpp.ClientXMPP):
 
     def __init__(self, jid, password, nick, feeds_config, message_types,
@@ -111,6 +128,9 @@ class FeedBot(slixmpp.ClientXMPP):
         self.quote_summary = quote_summary
         self.user_agent = user_agent
         self.show_images = show_images
+
+        # Inverted map: {feed_url: [jid, ...]} — each feed is downloaded once.
+        self.feed_map = _build_feed_map(feeds_config)
 
         self.add_event_handler("session_start", self.on_start)
         self.add_event_handler("disconnected", self.on_disconnect)
@@ -165,9 +185,10 @@ class FeedBot(slixmpp.ClientXMPP):
                 logging.error("Failed to rejoin MUC %s: %s", muc, rejoin_err)
 
     async def check_feeds(self):
-        for jid, feed_urls in self.feeds_config.items():
-            msg_type = self.message_types[jid]
-            for feed_url in feed_urls:
+        # Iterate by feed URL so each feed is downloaded only once,
+        # even when it appears in multiple destinations.
+        for feed_url, jids in self.feed_map.items():
+            for jid in jids:
                 try:
                     articles = await get_new_articles(
                         feed_url, jid, self.summary_max_length,
@@ -179,6 +200,7 @@ class FeedBot(slixmpp.ClientXMPP):
                     continue
 
                 for article in articles:
+                    msg_type = self.message_types[jid]
                     self.send_message(
                         mto=jid,
                         mbody=self.format_message(article),
@@ -197,8 +219,8 @@ class FeedBot(slixmpp.ClientXMPP):
                             )
                             await asyncio.sleep(1)
 
-                # Delay between feed downloads to avoid hammering servers.
-                await asyncio.sleep(30)
+            # Delay between feed downloads to avoid hammering servers.
+            await asyncio.sleep(30)
 
     def format_message(self, article):
         parts = ["*" + article["title"] + "*"]
