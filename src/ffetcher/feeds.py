@@ -13,11 +13,36 @@ from .db import is_new_entry, is_known_feed
 IMAGE_EXTENSIONS = (".jpg", ".jpeg", ".png", ".gif", ".webp", ".avif", ".svg")
 
 
-async def get_new_articles(feed_url, muc, summary_max_length=300, badwords=None,
-                     badwords_links=None, user_agent=None, languages=None):
+async def fetch_feed(feed_url, user_agent=None):
     """
-    Parse a feed and return a list of new articles for the given MUC.
-    Each article is a dict with keys: title, summary, link, images.
+    Download and parse a feed, returning the feedparser result.
+    Returns None on timeout or error so the caller can skip processing.
+    """
+    try:
+        loop = asyncio.get_running_loop()
+        feed = await asyncio.wait_for(
+            loop.run_in_executor(
+                None,
+                lambda: feedparser.parse(feed_url, agent=user_agent)
+            ),
+            timeout=30
+        )
+        return feed
+
+    except asyncio.TimeoutError:
+        logging.warning("Timeout fetching feed: %s", feed_url)
+        return None
+
+    except Exception as e:
+        logging.warning("Error fetching feed %s: %s", feed_url, e)
+        return None
+
+
+def process_feed(feed, feed_url, muc, summary_max_length=300, badwords=None,
+                 badwords_links=None, languages=None):
+    """
+    Process an already-downloaded feed for a specific destination JID.
+    Returns a list of new articles as dicts with keys: title, summary, link, images.
     Articles are returned in chronological order (oldest first).
 
     On the very first run for a (feed_url, muc) pair, all existing articles
@@ -33,29 +58,6 @@ async def get_new_articles(feed_url, muc, summary_max_length=300, badwords=None,
         badwords_links = []
     if languages is None:
         languages = []
-
-    # Pass a custom User-Agent to feedparser so servers can identify the
-    # client and are less likely to block it as an anonymous scraper.
-    # feed = feedparser.parse(feed_url, agent=user_agent)
-
-    try:
-      loop = asyncio.get_running_loop()
-
-      feed = await asyncio.wait_for(
-          loop.run_in_executor(
-              None,
-              lambda: feedparser.parse(feed_url, agent=user_agent)
-          ),
-          timeout=30
-      )
-
-    except asyncio.TimeoutError:
-        logging.warning("Timeout fetching feed: %s", feed_url)
-        return []
-
-    except Exception as e:
-        logging.warning("Error fetching feed %s: %s", feed_url, e)
-        return []
 
     # feed.bozo is set for any parsing anomaly, including minor ones like a
     # missing Content-Type header. Only treat it as an error if there are no
@@ -211,6 +213,7 @@ def _is_url(text):
     print a spurious warning about receiving a URL instead of HTML.
     """
     return bool(re.match(r"^[a-zA-Z][a-zA-Z0-9+\-.]*:/{0,2}\S+$", text.strip()))
+
 
 def _is_allowed_language(text, languages):
     """
