@@ -11,7 +11,7 @@ import slixmpp
 from dotenv import load_dotenv, find_dotenv
 
 from .db import init_db, cleanup_feeds
-from .feeds import get_new_articles
+from .feeds import fetch_feed, process_feed
 from .config import load_feeds
 
 # How often to ping each MUC to verify we are still joined (seconds).
@@ -185,18 +185,22 @@ class FeedBot(slixmpp.ClientXMPP):
                 logging.error("Failed to rejoin MUC %s: %s", muc, rejoin_err)
 
     async def check_feeds(self):
-        # Iterate by feed URL so each feed is downloaded only once,
-        # even when it appears in multiple destinations.
+        # Each feed URL is downloaded only once, then processed separately
+        # for each destination JID that subscribes to it.
         for feed_url, jids in self.feed_map.items():
+            logging.debug("Fetching feed: %s", feed_url)
+            feed = await fetch_feed(feed_url, self.user_agent)
+            if feed is None:
+                continue
+
             for jid in jids:
                 try:
-                    articles = await get_new_articles(
-                        feed_url, jid, self.summary_max_length,
-                        self.badwords, self.badwords_links,
-                        self.user_agent, self.languages
+                    articles = process_feed(
+                        feed, feed_url, jid, self.summary_max_length,
+                        self.badwords, self.badwords_links, self.languages
                     )
                 except Exception as e:
-                    logging.error("Error fetching feed %s: %s", feed_url, e)
+                    logging.error("Error processing feed %s for %s: %s", feed_url, jid, e)
                     continue
 
                 for article in articles:
