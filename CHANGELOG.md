@@ -3,11 +3,13 @@
 All notable changes to this project are documented in this file.
 
 ## [Unreleased]
+- 1:1 chat delivery: sections prefixed with `chat:` in `feeds.ini` send articles as private messages instead of groupchat
+
+## [3.0.0]
 
 ### Added
 - pipx packaging support (`src/ffetcher/` layout, `pyproject.toml`, `ffetcher` entry point)
 - `.env` and `feeds.ini` are now auto-generated with default placeholder content on first run if missing, instead of failing with an error
-- 1:1 chat delivery: sections prefixed with `chat:` in `feeds.ini` send articles as private messages instead of groupchat
 
 ### Changed
 - Renamed the package's main module to `__main__.py`, enabling `python -m ffetcher` and removing the redundant `ffetcher.ffetcher` entry point path
