@@ -245,3 +245,11 @@ Then enable and start it:
 ```sh
 systemctl enable --now ffetcher.service
 ```
+
+---
+
+## Troubleshooting
+
+### With venv + pip
+
+Recreate the `venv` after upgrading the bot
