@@ -7,6 +7,11 @@ feeds. For each subscribed (feed_url, muc) pair, downloads the feed, extracts
 all current article links, computes their hashes, and deletes any entries
 that are not in the current feed state.
 
+A delay (30s by default) is applied between consecutive feed downloads, to
+avoid hammering a server that hosts several of the subscribed feeds (e.g.
+multiple Mastodon tag feeds on the same instance) with back-to-back
+requests. Adjust with --delay, or disable with --delay 0.
+
 Requires ffetcher >= 4.0.0, where every row in the `entries` table records
 which feed_url produced it. This is what makes it safe to prune entries
 belonging to a single feed without touching entries recorded under a
@@ -28,9 +33,12 @@ import hashlib
 import logging
 import sqlite3
 import sys
+import time
 from pathlib import Path
 
 import feedparser
+
+DEFAULT_DELAY_SECONDS = 30
 
 
 def setup_logging(verbose: bool = False) -> None:
@@ -172,11 +180,49 @@ def delete_entries_by_hash(
         return 0
 
 
-def cleanup_database(db_path: str, verbose: bool = False) -> None:
+def vacuum_database(db_path: str) -> None:
+    """
+    Run VACUUM to reclaim disk space freed by deleted rows.
+
+    SQLite does not shrink the database file on DELETE by default; the
+    freed pages are kept around for reuse. VACUUM rebuilds the file to
+    actually release that space back to the filesystem.
+
+    Must run outside any transaction and with no pending changes on the
+    connection, so a dedicated connection is opened just for this.
+    """
+    size_before = Path(db_path).stat().st_size
+
+    conn = sqlite3.connect(db_path)
+    try:
+        conn.execute("VACUUM")
+    finally:
+        conn.close()
+
+    size_after = Path(db_path).stat().st_size
+    freed_mb = (size_before - size_after) / (1024 * 1024)
+    logging.info(
+        "VACUUM complete: %.2f MB reclaimed (%.2f MB -> %.2f MB)",
+        freed_mb,
+        size_before / (1024 * 1024),
+        size_after / (1024 * 1024),
+    )
+
+
+def cleanup_database(
+    db_path: str,
+    verbose: bool = False,
+    vacuum: bool = True,
+    delay: float = DEFAULT_DELAY_SECONDS,
+) -> None:
     """
     Main cleanup routine.
     Iterates through all known feeds and removes entries no longer present
     in the current feed content, scoped strictly per (feed_url, muc) pair.
+
+    A delay is applied between consecutive feed downloads to avoid hammering
+    a server that hosts several of the subscribed feeds (e.g. multiple tags
+    on the same Mastodon instance) with back-to-back requests.
     """
     logging.info("Starting database cleanup")
 
@@ -197,44 +243,64 @@ def cleanup_database(db_path: str, verbose: bool = False) -> None:
         logging.warning("No feeds found in database; nothing to clean")
         return
 
-    logging.info("Processing %d feed(s)", len(feed_configs))
+    num_feeds = len(feed_configs)
+    logging.info("Processing %d feed(s)", num_feeds)
+
+    # Rough time estimate: (num_feeds - 1) delays between downloads, plus a
+    # small per-feed allowance for the download/parse itself. This is only
+    # an approximation shown so the person running the script knows what to
+    # expect, especially with the default 30s delay across many feeds.
+    if delay > 0 and num_feeds > 1:
+        estimated_seconds = (num_feeds - 1) * delay
+        minutes, seconds = divmod(int(estimated_seconds), 60)
+        logging.info(
+            "With a %.0fs delay between feeds, this will take at least "
+            "~%dm%02ds to complete (plus actual download/parse time per feed)",
+            delay,
+            minutes,
+            seconds,
+        )
 
     total_deleted = 0
     feeds_processed = 0
     feeds_skipped = 0
 
-    for feed_url, muc in feed_configs:
+    for i, (feed_url, muc) in enumerate(feed_configs):
         logging.debug("Processing: %s -> %s", feed_url, muc)
 
         feed = fetch_and_parse_feed(feed_url)
         if not feed:
             logging.debug("Skipping feed: %s", feed_url)
             feeds_skipped += 1
-            continue
-
-        current_links = extract_links_from_feed(feed)
-        current_hashes = {compute_link_hash(link) for link in current_links}
-        logging.debug("Feed has %d article(s)", len(current_links))
-
-        # Entries in the database for THIS specific feed only.
-        db_entries = get_entries_for_feed(db_path, muc, feed_url)
-
-        # Hashes in the DB (for this feed) that are no longer in the feed.
-        hashes_to_delete = set(db_entries.keys()) - current_hashes
-
-        if hashes_to_delete:
-            deleted = delete_entries_by_hash(db_path, muc, feed_url, hashes_to_delete)
-            logging.info(
-                "Feed cleanup: %s -> %s: deleted %d entry(ies)",
-                feed_url,
-                muc,
-                deleted,
-            )
-            total_deleted += deleted
         else:
-            logging.debug("No entries to delete for: %s", feed_url)
+            current_links = extract_links_from_feed(feed)
+            current_hashes = {compute_link_hash(link) for link in current_links}
+            logging.debug("Feed has %d article(s)", len(current_links))
 
-        feeds_processed += 1
+            # Entries in the database for THIS specific feed only.
+            db_entries = get_entries_for_feed(db_path, muc, feed_url)
+
+            # Hashes in the DB (for this feed) that are no longer in the feed.
+            hashes_to_delete = set(db_entries.keys()) - current_hashes
+
+            if hashes_to_delete:
+                deleted = delete_entries_by_hash(db_path, muc, feed_url, hashes_to_delete)
+                logging.info(
+                    "Feed cleanup: %s -> %s: deleted %d entry(ies)",
+                    feed_url,
+                    muc,
+                    deleted,
+                )
+                total_deleted += deleted
+            else:
+                logging.debug("No entries to delete for: %s", feed_url)
+
+            feeds_processed += 1
+
+        # Wait between downloads, but not after the very last feed.
+        if delay > 0 and i < num_feeds - 1:
+            logging.debug("Waiting %.0fs before the next feed...", delay)
+            time.sleep(delay)
 
     logging.info(
         "Cleanup complete: %d feed(s) processed, %d skipped, %d total entries deleted",
@@ -242,6 +308,14 @@ def cleanup_database(db_path: str, verbose: bool = False) -> None:
         feeds_skipped,
         total_deleted,
     )
+
+    if total_deleted > 0 and vacuum:
+        logging.info("Reclaiming disk space...")
+        vacuum_database(db_path)
+    elif total_deleted > 0:
+        logging.debug("VACUUM skipped (--no-vacuum)")
+    else:
+        logging.debug("Nothing was deleted; skipping VACUUM")
 
 
 def main():
@@ -272,11 +346,32 @@ Requires ffetcher >= 4.0.0 (entries table with a feed_url column).
         action="store_true",
         help="Enable verbose debug output",
     )
+    parser.add_argument(
+        "--no-vacuum",
+        action="store_true",
+        help="Skip VACUUM after cleanup (VACUUM rebuilds the whole file and "
+        "needs free disk space roughly equal to the database size; useful "
+        "to skip on very large databases or constrained disks)",
+    )
+    parser.add_argument(
+        "--delay",
+        type=float,
+        default=DEFAULT_DELAY_SECONDS,
+        metavar="SECONDS",
+        help=f"Delay in seconds between feed downloads, to avoid hammering "
+        f"a server that hosts several subscribed feeds (default: "
+        f"{DEFAULT_DELAY_SECONDS}). Use 0 to disable.",
+    )
 
     args = parser.parse_args()
 
     setup_logging(verbose=args.verbose)
-    cleanup_database(args.database, verbose=args.verbose)
+    cleanup_database(
+        args.database,
+        verbose=args.verbose,
+        vacuum=not args.no_vacuum,
+        delay=args.delay,
+    )
 
 
 if __name__ == "__main__":
