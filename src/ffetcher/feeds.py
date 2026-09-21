@@ -84,7 +84,7 @@ def process_feed(feed, feed_url, muc, summary_max_length=300, badwords=None,
         if not link:
             continue
 
-        if not is_new_entry(link, muc):
+        if not is_new_entry(link, muc, feed_url):
             continue
 
         # Feed is new: record the article but do not post it.
