@@ -16,12 +16,23 @@ def init_db(db_path):
 
     conn = sqlite3.connect(_db_path)
     try:
+        # feed_url is recorded for every entry (see is_new_entry) so that
+        # maintenance tools such as scripts/ffetcher_db_cleanup.py can scope
+        # their operations to a single feed and never touch entries that
+        # belong to a different feed sharing the same MUC.
+        #
+        # The UNIQUE constraint is intentionally still (hash, muc), NOT
+        # (hash, muc, feed_url): when the same article link is present in
+        # more than one feed subscribed to the same MUC, this preserves the
+        # existing behavior of posting it only once (whichever feed is
+        # processed first "wins" and is recorded as feed_url for that row).
         conn.execute(
             """
             CREATE TABLE IF NOT EXISTS entries (
-                id    INTEGER PRIMARY KEY AUTOINCREMENT,
-                hash  TEXT NOT NULL,
-                muc   TEXT NOT NULL,
+                id       INTEGER PRIMARY KEY AUTOINCREMENT,
+                hash     TEXT NOT NULL,
+                muc      TEXT NOT NULL,
+                feed_url TEXT NOT NULL,
                 UNIQUE(hash, muc)
             )
             """
@@ -90,11 +101,23 @@ def is_known_feed(feed_url, muc):
         conn.close()
 
 
-def is_new_entry(link, muc):
+def is_new_entry(link, muc, feed_url):
     """
     Return True if this link has not been posted to this MUC before,
     and record it so future calls return False.
     Return False if it was already posted.
+
+    feed_url is recorded on the entry but is NOT part of the uniqueness
+    check: if the same article link appears in more than one feed
+    subscribed to the same MUC, it is still posted only once, matching
+    the bot's historical behavior. Whichever feed is processed first is
+    the one recorded as feed_url for that entry.
+
+    Recording feed_url (even though it doesn't affect deduplication) is
+    what allows maintenance tools such as scripts/ffetcher_db_cleanup.py
+    to scope their operations to a single feed's own entries, without
+    disturbing entries that happen to belong to a different feed sharing
+    the same MUC.
     """
     url_hash = hashlib.sha256(link.encode("utf-8")).hexdigest()
 
@@ -102,13 +125,14 @@ def is_new_entry(link, muc):
     try:
         try:
             conn.execute(
-                "INSERT INTO entries (hash, muc) VALUES (?, ?)",
-                (url_hash, muc),
+                "INSERT INTO entries (hash, muc, feed_url) VALUES (?, ?, ?)",
+                (url_hash, muc, feed_url),
             )
             conn.commit()
             return True
         except sqlite3.IntegrityError:
-            # UNIQUE constraint failed: entry already recorded.
+            # UNIQUE constraint failed: entry already recorded (by this
+            # feed or another one sharing the same muc).
             return False
     finally:
         conn.close()
