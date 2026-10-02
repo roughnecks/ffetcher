@@ -230,6 +230,13 @@ WorkingDirectory=/path/to/ffetcher
 ExecStart=/path/to/ffetcher/.venv/bin/ffetcher
 Restart=on-failure
 
+# Basic hardening. Adjust ReadWritePaths
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=full
+ProtectHome=true
+ReadWritePaths=/path/to/ffetcher
+
 [Install]
 WantedBy=multi-user.target
 ```
