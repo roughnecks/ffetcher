@@ -1,4 +1,5 @@
 import html
+import io
 import logging
 import re
 
@@ -11,6 +12,81 @@ from .db import is_new_entry, is_known_feed
 
 # Image extensions considered valid for inline preview.
 IMAGE_EXTENSIONS = (".jpg", ".jpeg", ".png", ".gif", ".webp", ".avif", ".svg")
+
+# Bold header line (XEP-0393) shown above the options of a poll, and the
+# marker prepended to each option. A plain hollow circle is used instead of
+# an emoji so the result does not depend on the client's font.
+POLL_HEADER = "*Poll:*"
+POLL_OPTION_MARKER = "\u25cb"
+
+
+def _allow_poll_markup():
+    """
+    Let <radio> elements survive feedparser's HTML sanitizer.
+
+    Mastodon renders the options of a poll in its feeds as non-standard
+    <radio> elements. feedparser's sanitizer only keeps tags from a fixed
+    allow-list and silently drops everything else, which would turn the
+    options into plain lines indistinguishable from ordinary text. Adding
+    "radio" to the allow-list keeps them intact so that _split_poll() can
+    recognise them, while every other tag is sanitized exactly as before.
+
+    This relies on feedparser internals, whose names differ between
+    releases, so the result is verified at the end with a tiny in-memory
+    feed. If it did not work, a warning is logged and the bot keeps running,
+    showing polls as plain lines, as it did before.
+    """
+    try:
+        import feedparser.sanitizer as sanitizer_module
+
+        # The class is called HTMLSanitizer in recent feedparser releases
+        # and _HTMLSanitizer in older ones.
+        sanitizer_class = (
+            getattr(sanitizer_module, "HTMLSanitizer", None)
+            or getattr(sanitizer_module, "_HTMLSanitizer")
+        )
+        elements = sanitizer_class.acceptable_elements
+
+        # Keep the original container type (set, frozenset, list or tuple).
+        if isinstance(elements, (set, frozenset)):
+            sanitizer_class.acceptable_elements = elements | {"radio"}
+        else:
+            sanitizer_class.acceptable_elements = type(elements)(
+                list(elements) + ["radio"]
+            )
+    except (ImportError, AttributeError, TypeError) as e:
+        logging.warning("Poll formatting disabled, feedparser internals changed: %s", e)
+        return
+
+    if not _poll_markup_survives():
+        logging.warning(
+            "Poll formatting disabled: feedparser still strips <radio> elements"
+        )
+
+
+def _poll_markup_survives():
+    """
+    Return True if a <radio> element survives feedparser's sanitizer.
+
+    Parses a minimal feed held in memory, using only feedparser's public API,
+    so the check works whatever the internals of the installed release are.
+    """
+    probe = (
+        b'<?xml version="1.0" encoding="utf-8"?>'
+        b'<rss version="2.0"><channel><title>t</title><item><title>t</title>'
+        b"<description>&lt;p&gt;&lt;radio&gt;x&lt;/radio&gt;&lt;/p&gt;</description>"
+        b"</item></channel></rss>"
+    )
+    try:
+        summary = feedparser.parse(io.BytesIO(probe)).entries[0].summary
+    except Exception:
+        # Anything unexpected means the result cannot be confirmed.
+        return False
+    return "<radio" in summary.lower()
+
+
+# Must run before any feed is parsed.
+_allow_poll_markup()
 
 
 async def fetch_feed(feed_url, user_agent=None):
@@ -131,6 +207,11 @@ def _extract_summary(entry, summary_max_length, article_link=None):
     If article_link is provided, any occurrence of that URL in the summary
     is removed to avoid duplicating the link that is already shown separately
     at the end of the message (e.g. Lemmy embeds the post link in the summary).
+
+    If the entry contains a poll, its options are taken out of the text,
+    formatted as a separate block and appended after the text has been
+    truncated, so the poll is never cut off and does not count towards
+    summary_max_length.
     """
     raw = ""
 
@@ -141,6 +222,9 @@ def _extract_summary(entry, summary_max_length, article_link=None):
 
     if not raw:
         return ""
+
+    # Separate the poll options (if any) from the rest of the post.
+    raw, poll_options = _split_poll(raw)
 
     text = _clean_text(raw)
 
@@ -153,7 +237,72 @@ def _extract_summary(entry, summary_max_length, article_link=None):
     if len(text) > summary_max_length:
         text = text[:summary_max_length].rsplit(" ", 1)[0] + " ..."
 
+    # Append the poll after truncation. A post may consist of the poll only.
+    if poll_options:
+        poll = _format_poll(poll_options)
+        text = (text + "\n\n" + poll) if text else poll
+
     return text
+
+
+def _split_poll(raw):
+    """
+    Separate the poll options from the HTML of a feed entry.
+
+    Returns a tuple (html_without_poll, options), where options is a list
+    of cleaned option strings. If the entry has no poll, the original HTML
+    is returned untouched together with an empty list.
+
+    Mastodon renders each option as a <radio> element, separated by <br>
+    (see _allow_poll_markup() for why these tags are preserved at all).
+    The feed carries neither the poll's expiry date nor its vote counts.
+    """
+    # Cheap check first, to avoid parsing HTML for ordinary entries. It looks
+    # for the bare word so that entity-escaped markup (&lt;radio) is caught
+    # too, since _clean_text() also tolerates escaped input.
+    if "radio" not in raw.lower():
+        return raw, []
+
+    soup = BeautifulSoup(html.unescape(raw), "lxml")
+    radios = soup.find_all("radio")
+    if not radios:
+        return raw, []
+
+    options = []
+    containers = []
+
+    for radio in radios:
+        # Reuse the regular cleanup so links and custom emoji inside an
+        # option are handled like in the post text, then flatten whitespace.
+        option = " ".join(_clean_text(radio.decode_contents()).split())
+        if option:
+            options.append(option)
+
+        parent = radio.parent
+        if parent is not None and not any(parent is c for c in containers):
+            containers.append(parent)
+
+        radio.decompose()
+
+    # Remove the paragraphs that only held the options, so they do not leave
+    # empty lines behind. Containers that still hold text are kept.
+    for container in containers:
+        if container.name in ("html", "body", "[document]"):
+            continue
+        if not container.get_text(strip=True):
+            container.decompose()
+
+    return str(soup), options
+
+
+def _format_poll(options):
+    """
+    Render poll options as a header line followed by one option per line,
+    each prefixed with a marker.
+    """
+    lines = [POLL_HEADER]
+    lines.extend("%s %s" % (POLL_OPTION_MARKER, option) for option in options)
+    return "\n".join(lines)
 
 
 def _extract_images(entry):
