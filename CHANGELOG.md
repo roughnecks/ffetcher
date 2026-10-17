@@ -2,6 +2,11 @@
 
 All notable changes to this project are documented in this file.
 
+## [4.1.0]
+
+### Added
+- **Poll formatting**: polls published on Mastodon-compatible servers are now shown as a bold `Poll:` header followed by one option per line, each prefixed with the `○` symbol, instead of bare lines attached to the end of the post text. Feeds do not carry the poll's expiry date or vote counts, so neither is shown.
+
 ## [4.0.0]
 
 ### Fixed
