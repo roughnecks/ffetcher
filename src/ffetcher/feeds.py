@@ -2,6 +2,7 @@ import html
 import io
 import logging
 import re
+from urllib.parse import unquote
 
 import asyncio
 import feedparser
@@ -417,13 +418,38 @@ def _contains_link_badword(link, badwords_links):
     return False
 
 
+def _is_hashtag_link(visible, href):
+    """
+    Return True if a link looks like a hashtag, whatever software made it.
+
+    Fediverse software builds tag URLs in different ways (/tags/name on
+    Mastodon, /search?tag=name on Hubzilla and Friendica, /tag/name on
+    Pleroma, ...), so the URL shape is not a reliable signal. What they all
+    share is a visible label made of "#" and a single word, with that same
+    word appearing somewhere in the URL.
+
+    Labels made only of digits (e.g. "#123", a reference to an issue) are
+    not hashtags, so those links are left alone.
+    """
+    visible = visible.strip()
+    if not re.fullmatch(r"#\w+", visible):
+        return False
+
+    tag = visible[1:]
+    if tag.isdigit():
+        return False
+
+    return tag.lower() in unquote(href).lower()
+
+
 def _fix_mastodon_links(soup):
     """
     Fix Mastodon's habit of splitting URLs and hashtags across multiple
     <span> tags inside <a> elements.
 
-    - Hashtag links (/tags/ in href) and mentions are replaced with their
-      visible text (e.g. #IRC, @user).
+    - Hashtag links (/tags/ in href, or a "#tag" label whose name also
+      appears in the href, as with Hubzilla's /search?tag=) and mentions are
+      replaced with their visible text (e.g. #IRC, @user).
     - Links where the visible text is meaningful (different from the href
       and not itself a URL) are converted to Markdown [text](url) format,
       preserving the label for readability in generic RSS feeds.
@@ -441,7 +467,11 @@ def _fix_mastodon_links(soup):
         visible = a.get_text(separator="")
 
         # Hashtags and mentions: show visible text only.
-        if "/tags/" in href or "mention" in classes:
+        if (
+            "/tags/" in href
+            or "mention" in classes
+            or _is_hashtag_link(visible, href)
+        ):
             a.replace_with(visible)
 
         # Empty href: reconstruct URL from span contents (e.g. gemini://).
