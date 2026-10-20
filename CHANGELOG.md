@@ -2,6 +2,11 @@
 
 All notable changes to this project are documented in this file.
 
+## [4.1.1]
+
+### Fixed
+- **Better Hashtags**: A link is now treated as a hashtag, and shown as plain #hashtag, when its label is a single #word and that same word appears in its URL. Tested on Hubzilla, should work for any other fediverse software that does not use `/tags/` URLs.
+
 ## [4.1.0]
 
 ### Added
