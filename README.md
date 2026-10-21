@@ -234,7 +234,7 @@ Restart=on-failure
 NoNewPrivileges=true
 PrivateTmp=true
 ProtectSystem=full
-ProtectHome=true
+ProtectHome=read-only
 ReadWritePaths=/path/to/ffetcher
 
 [Install]
